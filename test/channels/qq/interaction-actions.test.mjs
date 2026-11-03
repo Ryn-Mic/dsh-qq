@@ -10,7 +10,7 @@ function deferred() {
   return { promise, resolve };
 }
 
-function fixture({ group = false, policy, ack, execute, signal, acknowledgementDeadlineMs } = {}) {
+function fixture({ group = false, policy, ack, execute, signal, acknowledgementDeadlineMs, inspect } = {}) {
   let time = 100;
   let sequence = 0;
   const order = [];
@@ -23,6 +23,8 @@ function fixture({ group = false, policy, ack, execute, signal, acknowledgementD
   const messages = [];
   const executed = [];
   const acknowledgements = [];
+  const refreshed = [];
+  const diagnostics = [];
   const bot = {
     acknowledgeInteraction: async (id, code) => {
       order.push('ack'); acknowledgements.push({ id, code });
@@ -31,9 +33,10 @@ function fixture({ group = false, policy, ack, execute, signal, acknowledgementD
     sendText: async (target, text) => { messages.push({ target, text }); },
   };
   const bridge = {
-    validateMenuInteraction: ({ route, actor, number, token }) => store.inspect(route, actor, number, token, context),
+    validateMenuInteraction: (choice) => inspect ? inspect(choice) : store.inspect(choice.route, choice.actor, choice.number, choice.token, context),
     accept: async (message) => {
       order.push('accept'); messages.push(message);
+      if (message.content === '/m') { refreshed.push(message); return; }
       const picked = /\/m pick (\S+) (\d+)/u.exec(message.content);
       const choice = store.take(route, message.senderId, Number(picked[2]), picked[1], context);
       if (choice.error) return bot.sendText(message.replyTarget, choice.error);
@@ -42,7 +45,8 @@ function fixture({ group = false, policy, ack, execute, signal, acknowledgementD
     },
   };
   const handler = createQqInteractionHandler({ bot, bridge, appId: 'app', ownerUserOpenid: actor,
-    accessPolicy: policy, signal, acknowledgementDeadlineMs, now: () => time, logger: { warn() {} } });
+    accessPolicy: policy, signal, acknowledgementDeadlineMs, now: () => time,
+    logger: { info: (...args) => diagnostics.push(args), warn: (...args) => diagnostics.push(args) } });
   const event = (changes = {}) => ({
     id: `interaction-${++sequence}`, application_id: 'app', type: 11,
     scene: group ? 'group' : 'c2c', chat_type: group ? 1 : 2, version: 1,
@@ -51,7 +55,7 @@ function fixture({ group = false, policy, ack, execute, signal, acknowledgementD
     ...changes,
   });
   const handle = (eventValue = event(), contextChanges = {}) => handler({ bot, event: eventValue, state: {}, receivedAt: time, ...contextChanges }, eventValue);
-  return { bot, bridge, handler, handle, event, context, entry, store, messages, acknowledgements, executed, order,
+  return { bot, bridge, handler, handle, event, context, entry, store, messages, acknowledgements, executed, refreshed, diagnostics, order,
     advance: (ms) => { time += ms; } };
 }
 
@@ -100,12 +104,28 @@ test('QQ callback identity comes from platform fields and cannot use button_data
 test('QQ callback parser rejects malformed commands, mismatched button IDs and non-button events', () => {
   const f = fixture();
   for (const changes of [
-    { type: 12 }, { version: 2 }, { data: { type: 1, resolved: {} } },
+    { type: 12 }, { version: 2 }, { version: null }, { version: '1' }, { data: { type: 1, resolved: {} } },
     { data: { type: 11, resolved: { button_data: '/new', button_id: 'other' } } },
     { data: { type: 11, resolved: { button_data: `/m pick ${f.entry.token} 1`, button_id: 'other' } } },
+    { data: { type: 11, resolved: { button_data: `/m pick ${f.entry.token} 1`, button_id: null } } },
+    { data: { type: 11, resolved: { button_data: `/m pick ${f.entry.token} 1`, button_id: ` ${f.entry.token}_1` } } },
     { scene: 'group' }, { chat_type: 0 },
   ]) assert.equal(qqMenuInteraction(f.event(changes), 'app').code, 1);
 });
+
+for (const group of [false, true]) {
+  test(`QQ ${group ? 'group' : 'private'} buttons allow omitted button_id and default version`, async () => {
+    for (const omitted of ['button_id', 'version', 'both']) {
+      const f = fixture({ group });
+      const event = f.event();
+      if (omitted !== 'version') delete event.data.resolved.button_id;
+      if (omitted !== 'button_id') delete event.version;
+      assert.equal((await f.handle(event)).code, 0);
+      assert.deepEqual(f.acknowledgements, [{ id: event.id, code: 0 }]);
+      assert.deepEqual(f.executed, ['/new']);
+    }
+  });
+}
 
 test('QQ callback validates command permissions before ACK', async () => {
   const policy = directAccessPolicy({ users: [{ id: 'owner', canExecuteCommands: false }] });
@@ -116,20 +136,93 @@ test('QQ callback validates command permissions before ACK', async () => {
   assert.equal(f.entry.used, false);
 });
 
-test('QQ callback reports expired and changed session/workspace without consuming or executing', async () => {
+test('QQ callback refreshes expired and changed session/workspace without consuming or executing the old action', async () => {
   const expired = fixture();
   expired.advance(QQ_MENU_TTL_MS);
   await expired.handle();
-  assert.equal(expired.acknowledgements[0].code, 1);
-  assert.match(expired.messages[0].text, /过期/);
+  assert.equal(expired.acknowledgements[0].code, 0);
+  assert.equal(expired.refreshed.length, 1);
+  assert.deepEqual(expired.executed, []);
+  assert.equal(expired.entry.used, false);
   for (const field of ['workspace', 'sessionWorkspace', 'sessionId']) {
     const f = fixture();
     f.context[field] = 'changed';
     await f.handle();
-    assert.equal(f.acknowledgements[0].code, 1);
-    assert.match(f.messages[0].text, /会话或工作区已变化/);
+    assert.equal(f.acknowledgements[0].code, 0);
+    assert.equal(f.refreshed.length, 1);
+    assert.equal(f.entry.used, false);
     assert.deepEqual(f.executed, []);
   }
+});
+
+test('QQ stale callback recovery only reopens a safe menu after ACK and preserves its event reply target', async () => {
+  for (const [group, reason] of [false, true].flatMap((group) =>
+    ['expired', 'unknown-token', 'context-changed'].map((reason) => [group, reason]))) {
+    const f = fixture({ group, inspect: () => ({ code: 1, error: 'stale menu', reason }) });
+    const event = f.event();
+    await Promise.all([f.handle(event), f.handle(event)]);
+    assert.deepEqual(f.order, ['ack', 'accept']);
+    assert.deepEqual(f.acknowledgements, [{ id: event.id, code: 0 }]);
+    assert.deepEqual(f.executed, []);
+    assert.equal(f.refreshed.length, 1);
+    assert.equal(f.refreshed[0].content, '/m');
+    assert.deepEqual(f.refreshed[0].raw, { content: '/m' });
+    assert.deepEqual(f.refreshed[0].replyTarget, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', eventId: event.id });
+    assert.equal(f.entry.used, false);
+  }
+});
+
+test('QQ callback permission and identity failures never refresh a menu', async () => {
+  for (const reason of ['actor-mismatch', 'route-mismatch']) {
+    const f = fixture({ inspect: () => ({ code: 4, error: 'private information', reason }) });
+    await f.handle();
+    assert.deepEqual(f.acknowledgements.map(({ code }) => code), [4]);
+    assert.deepEqual(f.messages, []);
+    assert.deepEqual(f.refreshed, []);
+    assert.deepEqual(f.executed, []);
+  }
+  const policy = directAccessPolicy({ users: [{ id: 'owner', canExecuteCommands: false }] });
+  const f = fixture({ policy, inspect: () => ({ code: 1, error: 'stale menu', reason: 'unknown-token' }) });
+  await f.handle();
+  assert.deepEqual(f.acknowledgements.map(({ code }) => code), [4]);
+  assert.deepEqual(f.refreshed, []);
+});
+
+test('QQ invalid callbacks and nonrecoverable menu errors never enter a model or refresh', async () => {
+  for (const reason of ['invalid-choice', 'unpublished', 'unrecognized-private-value']) {
+    const f = fixture({ inspect: () => ({ code: 1, error: 'invalid menu', reason }) });
+    await f.handle();
+    assert.deepEqual(f.acknowledgements.map(({ code }) => code), [1]);
+    assert.deepEqual(f.executed, []);
+    assert.deepEqual(f.refreshed, []);
+  }
+  const f = fixture({ inspect: () => ({ code: 1, error: 'stale menu', reason: 'unknown-token' }) });
+  await f.handle(f.event({ data: { type: 11, resolved: { button_data: 'send this to a model' } } }));
+  assert.deepEqual(f.messages, []);
+  assert.deepEqual(f.refreshed, []);
+});
+
+test('QQ interaction diagnostics contain only a fixed reason, ACK result and elapsed time', async () => {
+  const f = fixture({ inspect: () => ({ code: 1, error: 'sensitive error', reason: 'unknown-token' }) });
+  const event = f.event({ id: 'secret-event-id', application_id: 'app' });
+  await f.handle(event);
+  const decision = f.diagnostics.find(([label]) => label === '[dsh-im:qq] interaction decision:');
+  assert.ok(decision);
+  assert.equal(decision[1].reason, 'unknown-token');
+  assert.equal(decision[1].ackCode, 0);
+  assert.equal(decision[1].acknowledged, true);
+  assert.equal(typeof decision[1].elapsedMs, 'number');
+  const logged = JSON.stringify(f.diagnostics);
+  for (const sensitive of ['secret-event-id', f.entry.token, 'sensitive error', 'button_data', 'owner']) {
+    assert.equal(logged.includes(sensitive), false);
+  }
+  const failing = fixture({ ack: async () => { throw new Error('/interactions/secret-event-id owner secret-token'); } });
+  await failing.handle();
+  const failureLog = JSON.stringify(failing.diagnostics);
+  for (const sensitive of ['secret-event-id', 'owner', 'secret-token']) assert.equal(failureLog.includes(sensitive), false);
+  const unknown = fixture({ inspect: () => ({ code: 1, error: 'private error', reason: 'private-reason-value' }) });
+  await unknown.handle();
+  assert.equal(JSON.stringify(unknown.diagnostics).includes('private-reason-value'), false);
 });
 
 test('QQ callbacks ACK each event once and consume each menu once across retries and simultaneous clicks', async () => {
@@ -169,6 +262,18 @@ test('QQ callback ACK deadline and stop cancellation prevent late business', asy
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(timedOut.entry.used, false);
   assert.deepEqual(timedOut.executed, []);
+  assert.deepEqual(timedOut.refreshed, []);
+  const staleAck = deferred();
+  const staleMenu = fixture({ acknowledgementDeadlineMs: 5, ack: async () => staleAck.promise,
+    inspect: () => ({ code: 1, error: 'stale menu', reason: 'unknown-token' }) });
+  assert.equal((await staleMenu.handle()).acknowledged, false);
+  staleAck.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(staleMenu.refreshed, []);
+  const completedLate = fixture({ ack: async () => completedLate.advance(2_501) });
+  assert.deepEqual(await completedLate.handle(), { code: 0, acknowledged: true, expired: true });
+  assert.deepEqual(completedLate.executed, []);
+  assert.deepEqual(completedLate.refreshed, []);
   const controller = new AbortController();
   const pendingAck = deferred();
   const f = fixture({ signal: controller.signal, ack: async () => pendingAck.promise });

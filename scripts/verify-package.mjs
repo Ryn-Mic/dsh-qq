@@ -12,7 +12,9 @@ const [manifest, lock, host, client, patch, hostEntry, clientEntry] = await Prom
   read('plugin-src/host/index.mjs'), read('plugin-src/client/index.js'),
 ]);
 assert.equal(manifest.name, packageName);
-assert.equal(manifest.version, '0.1.0');
+assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+assert.equal(lock.version, manifest.version);
+assert.equal(lock.packages[''].version, manifest.version);
 assert.equal(manifest.private, true, 'personal fork must not be published to npm');
 assert.equal(manifest.license, 'MIT');
 assert.equal(lock.name, packageName);

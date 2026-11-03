@@ -979,20 +979,32 @@ export class QqHarnessBridge {
   async #showMenu(message, key, name, pageView = null) {
     const actor = message.senderId;
     const context = this.#menuContext(key);
-    const entry = this.#menus.begin(key, actor, context);
-    const view = pageView ?? await qqMenuView(name, this.#harness, this.#state, key, {
-      signal: this.#signal, busy: this.#queues.has(key)
-        || this.#pendingInteractions.has(key) || this.#approvals.hasPending(key),
-    });
-    this.#signal?.throwIfAborted();
-    this.#harness.assertWorkspaceScope?.();
-    const current = this.#menuContext(key);
-    if (current.workspace !== context.workspace || current.sessionWorkspace !== context.sessionWorkspace
-      || current.sessionId !== context.sessionId) {
-      return { message: t('会话或工作区已变化，请重新发送 /m。') };
+    // Reserve request order before any asynchronous reads. A slow catalog must
+    // not take digits back after a newer card or an ordinary message.
+    const entry = this.#menus.stage(key, actor, context);
+    let view;
+    try {
+      view = pageView ?? await qqMenuView(name, this.#harness, this.#state, key, {
+        signal: this.#signal, busy: this.#queues.has(key)
+          || this.#pendingInteractions.has(key) || this.#approvals.hasPending(key),
+      });
+      this.#signal?.throwIfAborted();
+      this.#harness.assertWorkspaceScope?.();
+      const current = this.#menuContext(key);
+      if (current.workspace !== context.workspace || current.sessionWorkspace !== context.sessionWorkspace
+        || current.sessionId !== context.sessionId) {
+        this.#menus.discard(key, actor, entry);
+        return { message: t('会话或工作区已变化，请重新发送 /m。') };
+      }
+    } catch (error) {
+      this.#menus.discard(key, actor, entry);
+      throw error;
     }
     if (!this.#menus.publish(key, actor, entry, view)) return { messages: [] };
+    // Register before sending: QQ can dispatch a button callback before its
+    // message HTTP response arrives. Only confirmed delivery changes digits.
     await sendQqMenu(this.#bot, message.replyTarget, view, entry.token, { logger: this.#logger });
+    this.#menus.activate(key, actor, entry);
     this.#status.messagesReplied += 1;
     this.#status.lastReplyAt = new Date().toISOString();
     return { messages: [] };

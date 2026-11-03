@@ -156,7 +156,7 @@ test('QQ numbered session pages select the displayed ID even after the catalog i
   await f.send('1');
   assert.equal(f.state.sessionFor(key), 'session-6');
   await f.pick(1, first);
-  assert.match(f.sent.at(-1).text, /过期/);
+  assert.match(f.sent.at(-1).text, /会话或工作区已变化/);
   assert.equal(f.calls.filter(([op]) => op === 'bind').length, 1);
 });
 
@@ -352,11 +352,15 @@ test('QQ menu store expires, caps tracking, and rejects unavailable or invalid c
   assert.match(store.take('route', 'actor', 8, entry.token, context).error, /编号/);
   now = QQ_MENU_TTL_MS;
   assert.match(store.take('route', 'actor', 1, entry.token, context).error, /过期/);
-  for (let i = 0; i < 256; i++) store.begin('route', `actor-${i}`, context);
+  for (let i = 0; i < 256; i++) {
+    const candidate = store.stage('route', `actor-${i}`, context);
+    store.publish('route', `actor-${i}`, candidate, view);
+    store.activate('route', `actor-${i}`, candidate);
+  }
   assert.equal(store.has('route', 'actor'), false);
 });
 
-test('QQ callback preflight is read-only while legacy execution invalidates a changed context', () => {
+test('QQ callback preflight and execution reject context drift without consuming other card choices', () => {
   const store = new QqMenuStore();
   const context = { workspace: '/workspace', sessionWorkspace: '/workspace', sessionId: 'session-one' };
   const entry = store.begin('c2c:owner', 'owner', context);
@@ -365,7 +369,8 @@ test('QQ callback preflight is read-only while legacy execution invalidates a ch
   assert.equal(store.inspect('c2c:owner', 'owner', 1, entry.token, changed).code, 1);
   assert.equal(entry.used, false);
   assert.equal(store.take('c2c:owner', 'owner', 1, entry.token, changed).code, 1);
-  assert.equal(entry.used, true);
+  assert.equal(entry.used, false);
+  assert.equal(store.inspect('c2c:owner', 'owner', 1, entry.token, context).action.text, '/new');
 });
 
 test('QQ queued menu actions recheck running work before changing the session', async (t) => {

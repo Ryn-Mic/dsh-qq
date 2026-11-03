@@ -27,60 +27,106 @@ export function parseQqMenuCommand(text) {
   return { error: true };
 }
 
-// A menu belongs to its actor and route. The exact displayed actions, including
-// paginated choices, stay in memory; clients only send an opaque token + index.
+// Cards keep their own actor, route and displayed choices for their entire TTL.
+// The active pointer only controls bare numeric replies; publishing a candidate
+// must not retire a card that QQ is still displaying, even if delivery times out.
 export class QqMenuStore {
   #entries = new Map();
+  #owners = new Map();
+  #sequence = 0;
   #now;
   constructor({ now = Date.now } = {}) { this.#now = now; }
   #key(route, actor) { return `${route}\0${actor}`; }
-  has(route, actor) { return this.#entries.has(this.#key(route, actor)); }
-  tokenFor(route, actor) { return this.#entries.get(this.#key(route, actor))?.token; }
-  clear(route, actor) { this.#entries.delete(this.#key(route, actor)); }
-  begin(route, actor, context) {
-    const key = this.#key(route, actor);
-    const entry = { ...context, token: randomBytes(12).toString('hex'),
-      expiresAt: this.#now() + QQ_MENU_TTL_MS, used: false, view: null };
-    this.#entries.delete(key);
-    this.#entries.set(key, entry);
+  #prune() {
+    const now = this.#now();
+    for (const [token, entry] of this.#entries) {
+      if (entry.expiresAt <= now) this.#entries.delete(token);
+    }
     while (this.#entries.size > MAX_MENUS) this.#entries.delete(this.#entries.keys().next().value);
+    const liveOwners = new Set([...this.#entries.values()].map((entry) => this.#key(entry.route, entry.actor)));
+    for (const [key, owner] of this.#owners) {
+      if (!liveOwners.has(key)) this.#owners.delete(key);
+      else if (!this.#entries.has(owner.activeToken)) owner.activeToken = null;
+    }
+  }
+  has(route, actor) { return Boolean(this.tokenFor(route, actor)); }
+  tokenFor(route, actor) {
+    this.#prune();
+    return this.#owners.get(this.#key(route, actor))?.activeToken ?? undefined;
+  }
+  clear(route, actor) {
+    const owner = this.#owners.get(this.#key(route, actor));
+    if (!owner) return;
+    owner.activeToken = null;
+    // An older send that finishes after ordinary input must not reopen digits.
+    owner.sequence = ++this.#sequence;
+  }
+  stage(route, actor, context) {
+    this.#prune();
+    const entry = { ...context, route, actor, token: randomBytes(12).toString('hex'),
+      sequence: ++this.#sequence, expiresAt: this.#now() + QQ_MENU_TTL_MS,
+      used: false, usedChoices: new Set(), view: null };
+    this.#entries.set(entry.token, entry);
+    const key = this.#key(route, actor);
+    if (!this.#owners.has(key)) this.#owners.set(key, { activeToken: null, sequence: 0 });
+    this.#prune();
     return entry;
   }
+  // Kept for callers that construct explicit-token cards without numeric input.
+  begin(route, actor, context) { return this.stage(route, actor, context); }
   publish(route, actor, entry, view) {
-    if (this.#entries.get(this.#key(route, actor)) !== entry) return false;
+    if (entry.route !== route || entry.actor !== actor || entry.view
+      || this.#entries.get(entry.token) !== entry || entry.expiresAt <= this.#now()
+      || !Array.isArray(view?.entries)) return false;
     entry.view = view;
     return true;
   }
+  discard(route, actor, entry) {
+    if (entry.route !== route || entry.actor !== actor || entry.view
+      || this.#entries.get(entry.token) !== entry) return;
+    this.#entries.delete(entry.token);
+    this.#prune();
+  }
+  activate(route, actor, entry) {
+    this.#prune();
+    if (entry.route !== route || entry.actor !== actor || !entry.view
+      || this.#entries.get(entry.token) !== entry) return false;
+    const owner = this.#owners.get(this.#key(route, actor));
+    if (!owner || owner.sequence > entry.sequence) return false;
+    owner.activeToken = entry.token;
+    owner.sequence = entry.sequence;
+    return true;
+  }
   inspect(route, actor, number, token, context) {
-    const entry = this.#entries.get(this.#key(route, actor));
+    const entry = this.#entries.get(token ?? this.#owners.get(this.#key(route, actor))?.activeToken);
+    const expired = (reason, code = 1) => ({ error: t('这个菜单已过期，请回复 /m 重新打开。'), code, reason });
     if (!entry) {
-      return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 4 };
+      return expired('unknown-token');
     }
-    if (token && token !== entry.token) return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 1 };
-    if (entry.used) return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 3 };
-    if (!entry.view || entry.expiresAt <= this.#now()) {
-      return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 1 };
+    if (entry.route !== route) return expired('route-mismatch', 4);
+    if (entry.actor !== actor) return expired('actor-mismatch', 4);
+    if (entry.expiresAt <= this.#now()) return expired('expired');
+    if (!entry.view) return expired('unpublished');
+    const choice = entry.view.entries[number - 1];
+    if (!Number.isSafeInteger(number) || number < 1 || !choice) {
+      return { error: t('菜单没有这个编号，回复 /m 重新打开。'), code: 1, reason: 'invalid-choice' };
     }
+    if (entry.usedChoices.has(number)) return expired('already-used', 3);
     if (entry.workspace !== context.workspace || entry.sessionWorkspace !== context.sessionWorkspace
       || entry.sessionId !== context.sessionId) {
       return { error: t('会话或工作区已变化，请重新发送 /m。'), code: 1, reason: 'context-changed' };
-    }
-    const choice = entry.view.entries[number - 1];
-    if (!Number.isSafeInteger(number) || number < 1 || !choice) {
-      return { error: t('菜单没有这个编号，回复 /m 重新打开。'), code: 1 };
     }
     return { action: choice.action, context: entry };
   }
   take(route, actor, number, token, context) {
     const choice = this.inspect(route, actor, number, token, context);
-    if (choice.error) {
-      // Preserve legacy command-button invalidation. Inspection before ACK is
-      // read-only; once execution reaches take(), context drift ends this menu.
-      if (choice.reason === 'context-changed') this.#entries.get(this.#key(route, actor)).used = true;
-      return choice;
+    if (choice.error) return choice;
+    // Only mutations need a claim. Other buttons on the same visible card,
+    // including repeated section/page navigation, remain independently usable.
+    if (!['section', 'page'].includes(choice.action.kind)) {
+      choice.context.usedChoices.add(number);
+      choice.context.used = true;
     }
-    // Claim before awaiting anything: retries cannot repeat a destructive action.
-    choice.context.used = true;
     return choice;
   }
 }

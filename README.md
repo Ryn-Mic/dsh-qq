@@ -27,7 +27,7 @@
 在 DeepSeek Harness 内置终端中执行，把路径替换为收到的安装包：
 
 ```sh
-dsh plugin --profile desktop add -w /absolute/path/to/ryn-mic-dsh-qq-0.1.0.tgz
+dsh plugin --profile desktop add -w /absolute/path/to/ryn-mic-dsh-qq-0.1.1.tgz
 ```
 
 Web 实例使用 `--profile web`。安装后重启对应 DSH 实例，打开 QQ 设置。
