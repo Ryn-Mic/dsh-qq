@@ -201,13 +201,9 @@ test('the shared bridge binds locally with its conversation key and never prompt
   assert.equal(seen.has('message-session-bind'), true);
 });
 
-test('all nine channel bridges advertise /session and pass their current conversation key', async () => {
+test('QQ and shared bridges advertise /session and pass their current conversation key', async () => {
   const bridgeFamilies = [
     ['../src/channels/shared/text-harness-bridge.mjs', 'conversationKey'],
-    ['../src/channels/weixin/weixin-bridge.mjs', 'key'],
-    ['../src/channels/feishu/bridge.mjs', 'key'],
-    ['../src/channels/dingtalk/dingtalk-bridge.mjs', 'key'],
-    ['../src/channels/wecom/wecom-bridge.mjs', 'key'],
     ['../src/channels/qq/qq-bridge.mjs', 'key'],
   ];
   for (const [file, key] of bridgeFamilies) {
@@ -225,10 +221,6 @@ test('all nine channel bridges advertise /session and pass their current convers
   }
 
   for (const file of [
-    '../src/channels/discord/discord-bridge.mjs',
-    '../src/channels/slack/slack-bridge.mjs',
-    '../src/channels/telegram/telegram-bridge.mjs',
-    '../src/channels/whatsapp/whatsapp-bridge.mjs',
   ]) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8');
     assert.match(source, /extends TextHarnessBridge/);

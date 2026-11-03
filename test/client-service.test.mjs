@@ -120,13 +120,13 @@ test('web keeps its one bilingual settings entry, including hosts without provid
     const host = start(t, { provide });
     assert.equal(host.entries.size, 1);
     const { options, component } = [...host.entries][0];
-    assert.equal(options.id, 'xmanrui-dsh-im');
+    assert.equal(options.id, 'ryn-mic-dsh-qq');
     assert.equal(options.order, 21);
-    assert.equal(options.label(), 'IM机器人');
-    assert.equal(options.locale, 'dsh-im');
+    assert.equal(options.label(), 'QQ机器人');
+    assert.equal(options.locale, 'dsh-qq');
     const markup = renderToStaticMarkup(React.createElement(component));
-    assert.match(markup, /DSH-IM/);
-    assert.match(markup, /id="dim-panel-weixin"/);
+    assert.match(markup, /DSH-QQ/);
+    assert.match(markup, /id="dim-panel-qq"/);
     assert.equal(Boolean(host.service), provide);
     if (provide) {
       assert.equal(host.service.version, 1);
@@ -242,7 +242,7 @@ test('preferred section is initial-only, invalid sections retain the web default
   for (const id of ['weixin', 'feishu', 'dingtalk', 'wecom', 'wecomApp', 'qq', 'slack',
     'telegram', 'discord', 'whatsapp', 'imessage', 'matrix', 'office', 'global-settings', 'unknown', undefined]) {
     const markup = renderToStaticMarkup(host.service.render({ preferredSectionId: id }));
-    const expected = !id || id === 'unknown' ? 'weixin' : id;
+    const expected = id === 'global-settings' ? id : 'qq';
     assert.ok(markup.includes(`id="dim-panel-${expected}"`), String(id));
   }
   let renderer;
@@ -264,15 +264,12 @@ test('embedded panel receives the same management calls and picker, ignoring inj
   for (const [name, value] of Object.entries(dependencies)) assert.equal(props[name], value, name);
   const before = host.calls.length;
   const signal = new AbortController().signal;
-  for (const name of ['feishuRpcCall', 'emailRpcCall', 'matrixRpcCall', 'updateRpcCall', 'deliveryRpcCall', 'globalSettingsRpcCall']) {
+  for (const name of ['qqRpcCall', 'deliveryRpcCall', 'globalSettingsRpcCall']) {
     props[name]('check', { test: true }, signal);
   }
-  assert.equal(host.calls.length, before + 6);
+  assert.equal(host.calls.length, before + 3);
   assert.deepEqual(host.calls.slice(before).map((args) => args.slice(1)), [
-    ['dsh-im/feishu', { method: 'check', payload: { test: true } }, signal],
-    ['dsh-im/email', { method: 'check', payload: { test: true } }, signal],
-    ['dsh-im/matrix', { method: 'check', payload: { test: true } }, signal],
-    ['dsh-im/dsh-im', { method: 'check', payload: { test: true } }, signal],
+    ['dsh-im/qq', { method: 'check', payload: { test: true } }, signal],
     ['dsh-im/dsh-im-delivery', { method: 'check', payload: { test: true } }, signal],
     ['dsh-im/dsh-im-settings', { method: 'check', payload: { test: true } }, signal],
   ]);

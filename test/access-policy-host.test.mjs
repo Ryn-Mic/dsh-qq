@@ -12,15 +12,7 @@ import {
   SET_ACCESS_POLICY_ENDPOINT,
   validAccessPolicyPayload,
 } from '../plugin-src/host/channels/shared/access-policy-rpc.mjs';
-import { createWeixinRpcHandler, WEIXIN_ENDPOINTS } from '../plugin-src/host/channels/weixin/rpc.mjs';
-import { createFeishuRpcHandler, FEISHU_ENDPOINTS } from '../plugin-src/host/channels/feishu/rpc.mjs';
-import { createDingtalkRpcHandler, DINGTALK_ENDPOINTS } from '../plugin-src/host/channels/dingtalk/rpc.mjs';
-import { createWecomRpcHandler, WECOM_ENDPOINTS } from '../plugin-src/host/channels/wecom/rpc.mjs';
 import { createQqRpcHandler, QQ_ENDPOINTS } from '../plugin-src/host/channels/qq/rpc.mjs';
-import { createSlackRpcHandler, SLACK_ENDPOINTS } from '../plugin-src/host/channels/slack/rpc.mjs';
-import { createTelegramRpcHandler, TELEGRAM_ENDPOINTS } from '../plugin-src/host/channels/telegram/rpc.mjs';
-import { createDiscordRpcHandler, DISCORD_ENDPOINTS } from '../plugin-src/host/channels/discord/rpc.mjs';
-import { createWhatsappRpcHandler, WHATSAPP_ENDPOINTS } from '../plugin-src/host/channels/whatsapp/rpc.mjs';
 
 const users = (values = []) => values.map((value) => (
   value && typeof value === 'object'
@@ -250,18 +242,8 @@ function controllerFixture() {
   return { controller, calls };
 }
 
-test('all nine Host RPCs accept only the unified bot.access-policy.set contract', async () => {
-  const factories = [
-    ['weixin', createWeixinRpcHandler, WEIXIN_ENDPOINTS],
-    ['feishu', createFeishuRpcHandler, FEISHU_ENDPOINTS],
-    ['dingtalk', createDingtalkRpcHandler, DINGTALK_ENDPOINTS],
-    ['wecom', createWecomRpcHandler, WECOM_ENDPOINTS],
-    ['qq', createQqRpcHandler, QQ_ENDPOINTS],
-    ['slack', createSlackRpcHandler, SLACK_ENDPOINTS],
-    ['telegram', createTelegramRpcHandler, TELEGRAM_ENDPOINTS],
-    ['discord', createDiscordRpcHandler, DISCORD_ENDPOINTS],
-    ['whatsapp', createWhatsappRpcHandler, WHATSAPP_ENDPOINTS],
-  ];
+test('QQ Host RPC accepts only the unified bot.access-policy.set contract', async () => {
+  const factories = [['qq', createQqRpcHandler, QQ_ENDPOINTS]];
   const next = policy(open([], false), allowlist(['operator']));
   for (const [channel, createHandler, endpoints] of factories) {
     const { controller, calls } = controllerFixture();

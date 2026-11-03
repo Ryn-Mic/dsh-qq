@@ -25,7 +25,7 @@ import {
   ChannelListHeading,
   LastMessageErrorSummary,
 } from '../../channel-card-meta.js';
-import { installDingtalkStyles } from '../dingtalk/styles.js';
+import { installConnectionStyles } from '../shared/connection-styles.js';
 import {
   QQ_ENDPOINTS,
   connectionTestFeedback,
@@ -37,6 +37,7 @@ import {
   unwrapRpcResult,
 } from './api.js';
 import { installQqStyles } from './styles.js';
+import { QqEnhancementsEditor } from './enhancements.js';
 
 const ACTIVE_STATES = new Set(['pending', 'refreshing', 'connecting']);
 
@@ -179,6 +180,8 @@ export function AccountCard({
   onModelSave,
   onAgentPresetSave,
   onContextEnhancementSave,
+  onFeaturesSave,
+  onNativeManage,
   onRequestRemove,
   onConfirmRemove,
   onCancelRemove,
@@ -238,6 +241,8 @@ export function AccountCard({
         disabled: Boolean(busy),
         onSave: onContextEnhancementSave,
       }),
+      h(QqEnhancementsEditor, { account, disabled: Boolean(busy),
+        onFeaturesSave, onManage: onNativeManage }),
       h('div', { className: 'ddt-accountFooter dim-cardFooter' },
         h('div', { className: 'dim-cardFooterLayout' },
           h('div', { className: 'ddt-actions dim-cardActions' },
@@ -281,13 +286,13 @@ export function QqSettingsTab({ rpcCall }) {
   const addButtonRef = React.useRef(null);
 
   React.useEffect(() => {
-    const disposeDingtalk = installDingtalkStyles();
+    const disposeConnection = installConnectionStyles();
     const disposeQq = installQqStyles();
     mounted.current = true;
     return () => {
       mounted.current = false;
       disposeQq();
-      disposeDingtalk();
+      disposeConnection();
     };
   }, []);
 
@@ -544,6 +549,11 @@ export function QqSettingsTab({ rpcCall }) {
               { botId: account.botId, config },
             ),
             onRequestRemove: () => setRemoveTarget(account.botId),
+            onFeaturesSave: (streamingEnabled) => botAction(account, 'features',
+              QQ_ENDPOINTS.setFeatures, { botId: account.botId, streamingEnabled }),
+            onNativeManage: (action, args, confirm) => invoke(QQ_ENDPOINTS.nativeManage, {
+              botId: account.botId, action, args, ...(confirm ? { confirm: true } : {}),
+            }),
             onCancelRemove: () => setRemoveTarget(null),
             onConfirmRemove: async () => {
               await botAction(account, 'delete', QQ_ENDPOINTS.deleteBot, { botId: account.botId, confirm: true });

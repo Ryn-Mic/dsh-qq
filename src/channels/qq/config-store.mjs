@@ -50,6 +50,7 @@ function normalizeBot(value) {
     appId,
     secretRef,
     ownerUserOpenid,
+    ...(value.streamingEnabled === true ? { streamingEnabled: true } : {}),
     createdAt: cleanString(value.createdAt) ?? new Date().toISOString(),
     connectedAt: cleanString(value.connectedAt),
   });

@@ -2,24 +2,11 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 
-import { DingtalkHarnessBridge } from '../../../src/channels/dingtalk/dingtalk-bridge.mjs';
-import { DiscordHarnessBridge } from '../../../src/channels/discord/discord-bridge.mjs';
-import { normalizeDiscordMessage } from '../../../src/channels/discord/discord-runtime.mjs';
-import { FeishuHarnessBridge } from '../../../src/channels/feishu/bridge.mjs';
 import { QqHarnessBridge } from '../../../src/channels/qq/qq-bridge.mjs';
-import { SlackHarnessBridge } from '../../../src/channels/slack/slack-bridge.mjs';
-import { normalizeSlackEvent } from '../../../src/channels/slack/slack-runtime.mjs';
-import { TelegramHarnessBridge } from '../../../src/channels/telegram/telegram-bridge.mjs';
-import { normalizeTelegramUpdate } from '../../../src/channels/telegram/telegram-runtime.mjs';
-import { WecomHarnessBridge } from '../../../src/channels/wecom/wecom-bridge.mjs';
-import { WeixinHarnessBridge } from '../../../src/channels/weixin/weixin-bridge.mjs';
-import { WhatsappHarnessBridge } from '../../../src/channels/whatsapp/whatsapp-bridge.mjs';
-import { normalizeWhatsappMessage } from '../../../src/channels/whatsapp/whatsapp-runtime.mjs';
 import { CONTEXT_ENHANCEMENT_FIELDS } from '../../../src/channels/shared/context-enhancement.mjs';
 
-const CHANNELS = ['wecom', 'weixin', 'feishu', 'dingtalk', 'qq', 'slack', 'telegram', 'discord', 'whatsapp'];
-const TEXT_BRIDGES = { slack: SlackHarnessBridge, telegram: TelegramHarnessBridge,
-  discord: DiscordHarnessBridge, whatsapp: WhatsappHarnessBridge };
+const CHANNELS = ['qq'];
+const TEXT_BRIDGES = {};
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const FILE = Buffer.from('unchanged file bytes');
 const logger = { info() {}, warn() {}, error() {} };
@@ -635,61 +622,8 @@ for (const channel of CHANNELS) {
   }
 }
 
-test('Telegram retains event first/last names and falls back only to an existing username', async () => {
-  const current = fixture('telegram', { contextEnhancement: provider('telegram', settings()) });
-  for (const [index, from] of [
-    { first_name: 'Ada', last_name: 'Lovelace', username: 'ada' },
-    { first_name: '', last_name: '  ', username: 'ada' },
-    {},
-  ].entries()) {
-    const message = normalizeTelegramUpdate({ update_id: index + 1, message: {
-      message_id: index + 1, chat: { id: 100, type: 'private' }, from: { id: 42, ...from }, text: 'hello',
-    } }, { botId: 'bot', username: 'testbot' });
-    await current.bridge.accept(message);
-  }
-  assert.equal(sourceOf(current.prompts[0]).senderName, 'Ada Lovelace');
-  assert.equal(sourceOf(current.prompts[1]).senderName, 'ada');
-  assert.equal(Object.hasOwn(sourceOf(current.prompts[2]), 'senderName'), false);
-});
 
-test('Discord prefers event member nickname, global name, then username without a profile lookup', async () => {
-  const current = fixture('discord', { contextEnhancement: provider('discord', settings()) });
-  for (const [index, names] of [
-    { member: { nick: 'Group Nick' }, author: { global_name: 'Global Name', username: 'username' } },
-    { member: { nick: '' }, author: { global_name: 'Global Name', username: 'username' } },
-    { author: { global_name: null, username: 'username' } },
-    { author: {} },
-  ].entries()) {
-    await current.bridge.accept(normalizeDiscordMessage({
-      ...names, id: String(index + 1), channel_id: 'chat', guild_id: 'guild',
-      author: { id: 'actor', ...names.author }, content: 'hello', mentions: [{ id: 'bot' }],
-    }, 'bot'));
-  }
-  assert.deepEqual(current.prompts.map((content) => sourceOf(content).senderName),
-    ['Group Nick', 'Global Name', 'username', undefined]);
-});
 
-test('Feishu topics expose chatId always and threadId only when the event carries a thread', async () => {
-  const current = fixture('feishu', { contextEnhancement: provider('feishu', settings()) });
-  await current.bridge.accept(current.event(1, 'main channel', { kind: 'group' }));
-  const main = sourceOf(current.prompts[0]);
-  assert.equal(main.chatId, 'chat');
-  assert.equal(Object.hasOwn(main, 'threadId'), false);
-  assert.deepEqual(main, {
-    channel: 'feishu', conversationType: 'group', senderId: 'actor',
-    chatId: 'chat', botId: 'feishu_internal',
-  });
-  const topic = current.event(2, 'inside a topic', { kind: 'group' });
-  topic.message.thread_id = 'omt_topic';
-  await current.bridge.accept(topic);
-  const topicSource = sourceOf(current.prompts[1]);
-  assert.equal(topicSource.chatId, 'chat');
-  assert.equal(topicSource.threadId, 'omt_topic');
-  assert.equal(current.sessions.size, 2, 'topic messages keep their own thread-scoped Session');
-  await current.bridge.accept(current.event(3, 'direct chat', { kind: 'direct' }));
-  assert.equal(sourceOf(current.prompts[2]).chatId, 'chat');
-  assert.equal(Object.hasOwn(sourceOf(current.prompts[2]), 'threadId'), false);
-});
 
 for (const channel of CHANNELS) {
   for (const variant of ['image', 'file', 'mixed', 'quote']) {

@@ -54,7 +54,7 @@ export class ImageInputSettingsStore {
 /** One settings owner per DSH home, shared by the UI and channel Harness clients. */
 export function getImageInputSettingsStore(config = {}) {
   const root = resolve(config.dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'));
-  const path = join(root, 'integrations', 'dsh-im', 'image-input-settings.json');
+  const path = join(root, 'integrations', 'dsh-qq', 'image-input-settings.json');
   if (!stores.has(path)) stores.set(path, new ImageInputSettingsStore(path));
   return stores.get(path);
 }

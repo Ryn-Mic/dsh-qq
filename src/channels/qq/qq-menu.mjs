@@ -51,22 +51,37 @@ export class QqMenuStore {
     entry.view = view;
     return true;
   }
-  take(route, actor, number, token, context) {
+  inspect(route, actor, number, token, context) {
     const entry = this.#entries.get(this.#key(route, actor));
-    if (!entry || entry.used || !entry.view || entry.expiresAt <= this.#now()
-      || (token && token !== entry.token)) return { error: t('这个菜单已过期，请回复 /m 重新打开。') };
+    if (!entry) {
+      return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 4 };
+    }
+    if (token && token !== entry.token) return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 1 };
+    if (entry.used) return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 3 };
+    if (!entry.view || entry.expiresAt <= this.#now()) {
+      return { error: t('这个菜单已过期，请回复 /m 重新打开。'), code: 1 };
+    }
     if (entry.workspace !== context.workspace || entry.sessionWorkspace !== context.sessionWorkspace
       || entry.sessionId !== context.sessionId) {
-      entry.used = true;
-      return { error: t('会话或工作区已变化，请重新发送 /m。') };
+      return { error: t('会话或工作区已变化，请重新发送 /m。'), code: 1, reason: 'context-changed' };
     }
     const choice = entry.view.entries[number - 1];
     if (!Number.isSafeInteger(number) || number < 1 || !choice) {
-      return { error: t('菜单没有这个编号，回复 /m 重新打开。') };
+      return { error: t('菜单没有这个编号，回复 /m 重新打开。'), code: 1 };
+    }
+    return { action: choice.action, context: entry };
+  }
+  take(route, actor, number, token, context) {
+    const choice = this.inspect(route, actor, number, token, context);
+    if (choice.error) {
+      // Preserve legacy command-button invalidation. Inspection before ACK is
+      // read-only; once execution reaches take(), context drift ends this menu.
+      if (choice.reason === 'context-changed') this.#entries.get(this.#key(route, actor)).used = true;
+      return choice;
     }
     // Claim before awaiting anything: retries cannot repeat a destructive action.
-    entry.used = true;
-    return { action: choice.action, context: entry };
+    choice.context.used = true;
+    return choice;
   }
 }
 
@@ -177,13 +192,14 @@ export function qqMenuText(view, { fallback = false } = {}) {
   ].filter((line) => line !== undefined).join('\n');
 }
 
-export function qqMenuKeyboard(view, token) {
+export function qqMenuKeyboard(view, token, { actionType = 1 } = {}) {
   const buttons = view.entries.map((entry, index) => ({
     id: `${token}_${index + 1}`,
-    render_data: { label: view.columns === 3
-      ? clean(entry.label, 24).replace(t('模式／预设'), t('预设')).replace(t('切换归档显示'), t('归档显示'))
-      : `${index + 1}. ${clean(entry.label, 32)}`, visited_label: t('已选择'), style: 0 },
-    action: { type: 2, permission: { type: 2 }, data: `/m pick ${token} ${index + 1}`, enter: true,
+    render_data: { label: clean(view.columns === 3
+      ? clean(entry.label).replace(t('模式／预设'), t('预设')).replace(t('切换归档显示'), t('归档显示'))
+      : `${index + 1}. ${clean(entry.label)}`, 10), visited_label: clean(t('已选择'), 10), style: 0 },
+    action: { type: actionType, permission: { type: 2 }, data: `/m pick ${token} ${index + 1}`,
+      ...(actionType === 2 ? { enter: true } : {}),
       unsupport_tips: t('请回复数字选择，或发送 /m 重新打开菜单。') },
   }));
   const rows = [];
@@ -191,16 +207,38 @@ export function qqMenuKeyboard(view, token) {
   return { content: { rows } };
 }
 
+function definiteKeyboardRejection(error) {
+  return error instanceof ApiError && error.httpStatus >= 400
+    && error.httpStatus < 500 && error.httpStatus !== 429;
+}
+
+function callbackUnsupported(error) {
+  return definiteKeyboardRejection(error) && error.httpStatus !== 401
+    && (error.bizCode === 40034090
+      || /keyboard|button|callback|interaction|unsupported|not supported|按钮|回调|交互|不支持/iu.test(error.message));
+}
+
 export async function sendQqMenu(bot, target, view, token, { logger = console } = {}) {
   if (typeof bot.send === 'function') {
+    const content = qqMenuText(view).replace(/[\\`*_{}\[\]()<>#|!]/gu, '\\$&');
     try {
-      const content = qqMenuText(view).replace(/[\\`*_{}\[\]()<>#|!]/gu, '\\$&');
       return await bot.send({ target, msgType: 2, markdown: { content }, keyboard: qqMenuKeyboard(view, token) });
     } catch (error) {
       // A timeout may have delivered already. Only a definite provider rejection
       // permits another send, so a network fault never creates duplicate menus.
-      if (!(error instanceof ApiError) || error.httpStatus < 400 || error.httpStatus >= 500 || error.httpStatus === 429) throw error;
-      logger.warn?.('[dsh-im:qq] menu rejected; using numbered text:', error.bizCode);
+      if (!definiteKeyboardRejection(error)) throw error;
+      if (!callbackUnsupported(error)) {
+        logger.warn?.('[dsh-im:qq] menu rejected; using numbered text:', error.bizCode);
+        return bot.sendText(target, qqMenuText(view, { fallback: true }));
+      }
+      logger.warn?.('[dsh-im:qq] callback menu rejected; trying command buttons:', error.bizCode);
+    }
+    try {
+      return await bot.send({ target, msgType: 2, markdown: { content },
+        keyboard: qqMenuKeyboard(view, token, { actionType: 2 }) });
+    } catch (error) {
+      if (!definiteKeyboardRejection(error)) throw error;
+      logger.warn?.('[dsh-im:qq] command menu rejected; using numbered text:', error.bizCode);
     }
   }
   return bot.sendText(target, qqMenuText(view, { fallback: true }));

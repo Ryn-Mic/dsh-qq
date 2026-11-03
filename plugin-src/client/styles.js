@@ -1,4 +1,4 @@
-export const IM_STYLE_ID = 'xmanrui-dsh-im-settings';
+export const IM_STYLE_ID = 'ryn-mic-dsh-qq-settings';
 
 const CSS = String.raw`
 .dim-conversationDirectorySettings { max-width: 720px; }
@@ -845,7 +845,7 @@ export function installImStyles() {
   const existing = document.querySelector(`style[data-plugin-css="${IM_STYLE_ID}"]`);
   if (existing) return () => {};
   const style = document.createElement('style');
-  style.dataset.plugin = '@xmanrui/dsh-im';
+  style.dataset.plugin = '@ryn-mic/dsh-qq';
   style.dataset.pluginCss = IM_STYLE_ID;
   style.textContent = CSS;
   document.head.appendChild(style);

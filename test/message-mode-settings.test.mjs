@@ -6,12 +6,7 @@ import test from 'node:test';
 import { BotWorkspaceStore, createWorkspaceAwareController, createBotWorkspaceScope } from '../src/channels/shared/bot-workspace-store.mjs';
 import { SET_MESSAGE_MODE_ENDPOINT } from '../src/channels/shared/message-mode.mjs';
 
-const CHANNELS = [
-  ['wecom', 'Wecom'], ['weixin', 'Weixin'], ['feishu', 'Feishu'], ['dingtalk', 'Dingtalk'],
-  ['qq', 'Qq'], ['slack', 'Slack'], ['telegram', 'Telegram'], ['discord', 'Discord'],
-  ['whatsapp', 'Whatsapp'], ['wecom-app', 'WecomApp'], ['imessage', 'IMessage'],
-  ['email', 'Email'], ['matrix', 'Matrix'],
-];
+const CHANNELS = [['qq', 'Qq']];
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-im-message-mode-'));

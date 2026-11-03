@@ -15,6 +15,7 @@ import { publicWorkspaceError, SET_WORKSPACE_ENDPOINT, validWorkspacePayload } f
 import { publicQqStateError } from '../../../../src/channels/qq/state-error.mjs';
 import { SET_AGENT_PRESET_ENDPOINT, validAgentPresetPayload } from '../shared/agent-preset-rpc.mjs';
 import { SET_MODEL_ENDPOINT, validModelPayload } from '../shared/model-setting-rpc.mjs';
+import { defaultQqNativeConfiguration, QQ_NATIVE_ACTIONS, QQ_NATIVE_WRITE_ACTIONS } from '../../../../src/channels/qq/native-presets.mjs';
 
 export const QQ_RPC_CHANNEL = '/qq';
 export const QQ_ENDPOINTS = Object.freeze({
@@ -32,12 +33,22 @@ export const QQ_ENDPOINTS = Object.freeze({
   setBusyMessageMode: SET_MESSAGE_MODE_ENDPOINT,
   setAccessPolicy: SET_ACCESS_POLICY_ENDPOINT,
   setAlias: SET_ALIAS_ENDPOINT,
+  setFeatures: 'bot.features.set',
+  nativeManage: 'bot.native.manage',
+  sendRich: 'bot.rich.send',
 });
 export const QQ_RPC_ENDPOINTS = Object.freeze(Object.values(QQ_ENDPOINTS));
 
 const FORBIDDEN_PUBLIC_KEYS = new Set([
   'appSecret', 'app_secret', 'secretRef', 'ownerUserOpenid', 'userOpenid', 'verificationUrl',
+  'accessToken', 'access_token', 'clientSecret', 'client_secret', 'token',
 ]);
+
+const NATIVE_FIELDS = Object.freeze({
+  defaults: [], getMenu: [], putMenu: ['menu', 'expectedVersion'], listPanels: ['query'],
+  getPanel: ['panelId'], createPanel: ['panel'], updatePanel: ['panelId', 'panel'],
+  deletePanel: ['panelId'], updatePanelTargets: ['panelId', 'targets'],
+});
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -45,6 +56,11 @@ function isRecord(value) {
 
 function exactKeys(value, allowed) {
   return isRecord(value) && Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function boundedRecord(value) {
+  if (!isRecord(value)) return false;
+  try { return JSON.stringify(value).length <= 2 * 1024 * 1024; } catch { return false; }
 }
 
 function validId(value) {
@@ -71,6 +87,27 @@ function payloadFailure(endpoint, payload) {
       && validCredential(payload.appId, 256)
       && validCredential(payload.appSecret, 1024)
       ? null : 'bot.bind-credentials requires AppID and AppSecret.';
+  }
+  if (endpoint === QQ_ENDPOINTS.setFeatures) {
+    return exactKeys(payload, ['botId', 'streamingEnabled']) && validId(payload.botId)
+      && typeof payload.streamingEnabled === 'boolean'
+      ? null : 'bot.features.set requires a botId and streamingEnabled boolean.';
+  }
+  if (endpoint === QQ_ENDPOINTS.nativeManage) {
+    return exactKeys(payload, ['botId', 'action', 'args', 'confirm']) && validId(payload.botId)
+      && QQ_NATIVE_ACTIONS.includes(payload.action)
+      && (payload.args === undefined || boundedRecord(payload.args))
+      && exactKeys(payload.args ?? {}, NATIVE_FIELDS[payload.action])
+      && (!QQ_NATIVE_WRITE_ACTIONS.includes(payload.action) || payload.confirm === true)
+      && (payload.confirm === undefined || typeof payload.confirm === 'boolean')
+      ? null : 'Invalid native QQ management action; writes require confirm=true.';
+  }
+  if (endpoint === QQ_ENDPOINTS.sendRich) {
+    return exactKeys(payload, ['botId', 'target', 'message', 'confirm']) && validId(payload.botId)
+      && payload.confirm === true && exactKeys(payload.target, ['scope', 'targetId'])
+      && ['c2c', 'group'].includes(payload.target.scope) && validId(payload.target.targetId)
+      && boundedRecord(payload.message)
+      ? null : 'Invalid rich QQ message; an explicit target and confirm=true are required.';
   }
   if (endpoint === QQ_ENDPOINTS.reconnectBot) {
     return exactKeys(payload, ['botId', 'sendTest'])
@@ -122,6 +159,28 @@ function sanitizePublic(value) {
   return safe;
 }
 
+function extensionEndpoint(endpoint) {
+  return [QQ_ENDPOINTS.setFeatures, QQ_ENDPOINTS.nativeManage, QQ_ENDPOINTS.sendRich].includes(endpoint);
+}
+
+function publicExtensionError(error) {
+  const uncertain = ['qq-management-outcome-unknown', 'qq-delivery-uncertain'].includes(error?.code);
+  const conflict = error?.code === 'qq-menu-version-conflict';
+  const invalid = error instanceof TypeError || error instanceof RangeError;
+  const value = {
+    code: uncertain ? error.code : conflict ? 'qq-menu-version-conflict' : invalid ? 'bad-request' : 'qq-extension-failed',
+    message: uncertain ? 'QQ 返回结果未确认，请先检查聊天或读取平台配置，避免重复提交。'
+      : conflict ? 'QQ 菜单已变化，请重新读取并确认后应用。'
+        : invalid ? 'QQ 配置格式不合法，请检查字段、数量与链接。'
+          : 'QQ 操作未完成，请检查连接与平台权限。',
+    ...(uncertain ? { reconciliationRequired: true } : {}),
+  };
+  for (const key of ['menuBackup', 'menuRestore']) {
+    if (boundedRecord(error?.[key])) value[key] = sanitizePublic(error[key]);
+  }
+  return value;
+}
+
 async function qrDataUrl(value) {
   return QRCode.toDataURL(value, {
     type: 'image/png', errorCorrectionLevel: 'M', margin: 2, width: 320,
@@ -165,6 +224,17 @@ export function createQqRpcHandler(controller, { encodeQr = qrDataUrl } = {}) {
     try {
       let value;
       if (endpoint === QQ_ENDPOINTS.status) value = await publicStatus(await controller.status(), cachedEncode);
+      else if (endpoint === QQ_ENDPOINTS.setFeatures) {
+        value = await publicStatus(await controller.configureFeatures(payload.botId, {
+          streamingEnabled: payload.streamingEnabled,
+        }), cachedEncode);
+      } else if (endpoint === QQ_ENDPOINTS.nativeManage) {
+        value = payload.action === 'defaults' ? defaultQqNativeConfiguration()
+          : sanitizePublic(await controller.nativeManagement(payload.botId, payload.action,
+            payload.args ?? {}, { signal }));
+      } else if (endpoint === QQ_ENDPOINTS.sendRich) {
+        value = await controller.sendRichMessage(payload.botId, payload.target, payload.message, { signal });
+      }
       else if (endpoint === QQ_ENDPOINTS.beginProvisioning) value = await withEncodedQr(await controller.startProvisioning(), cachedEncode);
       else if (endpoint === QQ_ENDPOINTS.pollProvisioning) {
         const current = await controller.registrationStatus(payload.attemptId);
@@ -243,10 +313,17 @@ export function createQqRpcHandler(controller, { encodeQr = qrDataUrl } = {}) {
       } else {
         value = await publicStatus(await controller.deleteBot(payload.botId), cachedEncode);
       }
-      return signal?.aborted
+      return signal?.aborted && !extensionEndpoint(endpoint)
         ? { ok: false, error: { code: 'cancelled', message: 'The request was cancelled.' } }
         : { ok: true, value };
     } catch (error) {
+      if (extensionEndpoint(endpoint)) {
+        const uncertain = ['qq-management-outcome-unknown', 'qq-delivery-uncertain'].includes(error?.code);
+        return diagnosticRpcResult(diagnostics, error,
+          { ok: false, error: signal?.aborted && !uncertain
+            ? { code: 'cancelled', message: 'The request was cancelled.' }
+            : publicExtensionError(error) }, { operation: endpoint, botId: payload?.botId });
+      }
       const workspaceError = publicWorkspaceError(error);
       return diagnosticRpcResult(diagnostics, error, signal?.aborted
         ? { ok: false, error: { code: 'cancelled', message: 'The request was cancelled.' } }

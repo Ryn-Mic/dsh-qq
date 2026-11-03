@@ -1,32 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { DingtalkHarnessBridge } from '../src/channels/dingtalk/dingtalk-bridge.mjs';
-import { DiscordHarnessBridge } from '../src/channels/discord/discord-bridge.mjs';
-import { FeishuHarnessBridge } from '../src/channels/feishu/bridge.mjs';
 import { QqHarnessBridge } from '../src/channels/qq/qq-bridge.mjs';
 import { setImHostLanguage } from '../src/channels/shared/i18n.mjs';
-import { SlackHarnessBridge } from '../src/channels/slack/slack-bridge.mjs';
-import { normalizeSlackEvent } from '../src/channels/slack/slack-runtime.mjs';
-import { TelegramHarnessBridge } from '../src/channels/telegram/telegram-bridge.mjs';
-import { WecomHarnessBridge } from '../src/channels/wecom/wecom-bridge.mjs';
-import { WeixinHarnessBridge } from '../src/channels/weixin/weixin-bridge.mjs';
-import { WhatsappHarnessBridge } from '../src/channels/whatsapp/whatsapp-bridge.mjs';
-import { WecomAppBridge } from '../src/channels/wecom-app/wecom-app-bridge.mjs';
-import { MatrixHarnessBridge } from '../src/channels/matrix/matrix-bridge.mjs';
-import { IMessageHarnessBridge } from '../src/channels/imessage/imessage-bridge.mjs';
-import { EmailHarnessBridge } from '../src/channels/email/email-bridge.mjs';
 
-const CHANNELS = ['weixin', 'feishu', 'dingtalk', 'wecom', 'qq', 'slack', 'telegram', 'discord', 'whatsapp'];
-const TEXT_BRIDGES = {
-  matrix: MatrixHarnessBridge,
-  imessage: IMessageHarnessBridge,
-  email: EmailHarnessBridge,
-  slack: SlackHarnessBridge,
-  telegram: TelegramHarnessBridge,
-  discord: DiscordHarnessBridge,
-  whatsapp: WhatsappHarnessBridge,
-};
+const CHANNELS = ['qq'];
+const TEXT_BRIDGES = {};
 const SESSION_ID = 'history-session';
 const MARKERS = [
   'history-user-1', 'history-assistant-1',
@@ -233,7 +212,7 @@ function fixture(channel, { sessionId = SESSION_ID, ask, readHistory, send } = {
   return { bridge, message, sent, calls, sessions, key, seen, status };
 }
 
-for (const channel of [...CHANNELS, 'wecom-app', 'matrix', 'imessage', 'email']) {
+for (const channel of CHANNELS) {
   for (const [code, publicCode] of [['session-archived', 'SESSION_ARCHIVED'], ['turn-blocked', 'TURN_BLOCKED']]) {
     test(`${channel}: ${code} is visible and preserves the existing binding`, async () => {
       const f = fixture(channel, { ask: async () => {
@@ -424,7 +403,7 @@ for (const channel of CHANNELS) {
   }
 }
 
-for (const channel of ['weixin', 'feishu', 'qq']) {
+for (const channel of ['qq']) {
   test(`${channel}: the existing owner/allowlist guard still blocks history`, async () => {
     const f = fixture(channel);
     await f.bridge.accept(f.message('denied-history', '/history', { sender: 'untrusted' }));
@@ -432,49 +411,3 @@ for (const channel of ['weixin', 'feishu', 'qq']) {
     assert.deepEqual(f.calls, { reads: [], asks: [], mutations: [], downloads: [] });
   });
 }
-
-test('Feishu accepts its existing plain post normalization for /history', async () => {
-  const f = fixture('feishu');
-  await f.bridge.accept(f.message('post-history', '/history 1', { post: true }));
-  assert.deepEqual(previewMarkers(f.sent), MARKERS.slice(-1));
-  assert.deepEqual(f.calls.asks, []);
-});
-
-test('Feishu all-message group mode refuses unmentioned history without prompting', async () => {
-  const f = fixture('feishu');
-  f.sessions.set('group:group-chat', SESSION_ID);
-  await f.bridge.accept(f.message('group-unmentioned-history', '/history', { group: true, addressed: false }));
-  assert.match(f.sent.at(-1).text, /私聊/);
-  assert.deepEqual(f.calls, { reads: [], asks: [], mutations: [], downloads: [] });
-});
-
-test('Feishu mention-only group mode still ignores an unmentioned history command', async () => {
-  const f = fixture('feishu');
-  f.bridge.setGroupResponseMode('mention');
-  await f.bridge.accept(f.message('group-unmentioned-ignored', '/history', { group: true, addressed: false }));
-  assert.deepEqual(f.sent, []);
-  assert.deepEqual(f.calls, { reads: [], asks: [], mutations: [], downloads: [] });
-});
-
-test('Slack leading-space history messages normalize into the shared command without prompting', async () => {
-  const f = fixture('slack');
-  for (const [text, count] of [[' /history', 3], [' /history 10', 5]]) {
-    f.sent.length = 0;
-    const message = normalizeSlackEvent({
-      event_id: `history-leading-space-${count}`,
-      team_id: 'team',
-      event: {
-        type: 'message', channel_type: 'im', channel: 'chat', user: 'owner',
-        ts: `1700000000.00${count}`, text,
-      },
-    }, 'bot');
-    assert.equal(message.content, text.trim());
-    await f.bridge.accept(message);
-    assert.deepEqual(previewMarkers(f.sent), MARKERS.slice(-count));
-    assert.deepEqual(f.sent[0].target, message.replyTarget);
-  }
-  assert.equal(f.calls.reads.length, 2);
-  assert.ok(f.calls.reads.every(({ id }) => id === SESSION_ID));
-  assert.deepEqual(f.calls.asks, []);
-  assert.deepEqual(f.calls.mutations, []);
-});

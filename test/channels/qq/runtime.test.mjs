@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
+import { typingIndicator } from '@tencent-connect/qqbot-nodejs';
 
 import { QqRuntime } from '../../../src/channels/qq/qq-runtime.mjs';
 import { rememberConnectionTestTarget } from '../../../src/channels/shared/connection-test.mjs';
+import { directAccessPolicy } from '../access-policy-fixture.mjs';
 
 function deferred() {
   let resolve;
@@ -120,6 +122,7 @@ test('QQ runtime waits for gateway ready, installs typing, and stops its client'
   assert.equal(bot.middlewares[2].options.predicate({ message: { senderId: 'owner' } }), true);
   assert.equal(bot.middlewares[2].options.predicate({ message: { senderId: 'other' } }), false);
   assert.equal(botOptions.markdownSupport, false);
+  assert.equal(botOptions.intents, undefined, 'the SDK default includes native interaction events');
   botOptions.logger.debug('raw gateway payload');
   botOptions.logger.info('gateway ready');
   assert.deepEqual(sdkLogs, [['info', 'gateway ready']]);
@@ -310,4 +313,120 @@ test('QQ runtime enables result-file delivery without per-bot configuration', as
   await askObserved.promise;
   assert.equal(typeof onArtifact, 'function');
   await runtime.stop();
+});
+
+test('QQ message handlers keep SDK typing alive through work and cancel it on stop', async (t) => {
+  const bot = new FakeBot();
+  const started = deferred();
+  let typingCount = 0;
+  let askSignal;
+  bot.sendTyping = async () => { typingCount++; };
+  const runtime = new QqRuntime({
+    config: { botId: 'qq_bot', appId: 'app', ownerUserOpenid: 'owner' }, appSecret: 'secret',
+    harness: { ensureRunning: async () => true, sessionExists: async () => true,
+      ask: async (_id, _text, { signal }) => {
+        askSignal = signal; started.resolve();
+        await new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      } },
+    state: { hasSeen: () => false, markSeen: async () => {}, sessionFor: () => 'session-existing' },
+    createBot: () => bot,
+    typingMiddleware: (options) => typingIndicator({ ...options, keepAliveIntervalMs: 5 }),
+    logger: { error() {}, warn() {}, info() {} },
+  });
+  t.after(() => runtime.stop());
+  await runtime.start();
+  const message = { kind: 'c2c', senderId: 'owner', content: '长任务', messageId: 'typing-task',
+    rawEventType: 'C2C_MESSAGE_CREATE', replyTarget: { scope: 'c2c', targetId: 'owner', msgId: 'typing-task' } };
+  const ctx = { bot, message, replyTarget: message.replyTarget, log: { debug() {} } };
+  let index = 0;
+  const next = async () => index < bot.middlewares.length
+    ? bot.middlewares[index++](ctx, next)
+    : bot.listeners('message')[0](ctx, ctx.message);
+  let settled = false;
+  const dispatch = next().finally(() => { settled = true; });
+  await started.promise;
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(settled, false);
+  assert.ok(typingCount > 1, 'typing keepalive remains active while the handler Promise is pending');
+  await runtime.stop();
+  await dispatch;
+  assert.equal(askSignal.aborted, true);
+  const countAfterStop = typingCount;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(typingCount, countAfterStop);
+});
+
+async function callbackRuntime(t, { group = false, policy, onAck } = {}) {
+  const bot = new FakeBot();
+  const acks = [];
+  const route = group ? 'group:group-one' : 'c2c:owner';
+  const sessions = new Map([[route, 'session-original']]);
+  const seen = new Set();
+  let cleared = 0;
+  const state = {
+    hasSeen: (id) => seen.has(id), markSeen: async (id) => { seen.add(id); },
+    sessionFor: (key) => sessions.get(key) ?? null,
+    clearSession: async (key) => { cleared++; sessions.delete(key); },
+  };
+  bot.send = async (request) => { bot.sent.push(request); return { id: `sent-${bot.sent.length}` }; };
+  bot.acknowledgeInteraction = async (id, code) => { acks.push({ id, code }); await onAck?.(id, code); };
+  let sequence = 0;
+  const runtime = new QqRuntime({
+    config: { botId: 'qq_bot', appId: 'app', ownerUserOpenid: 'owner' }, appSecret: 'secret',
+    harness: { ensureRunning: async () => true, currentWorkspace: () => '/workspace',
+      listWorkspaceSessions: async () => ({ sessions: [] }),
+      listModels: async () => ({ current: {}, groups: [] }), agentPresetSettings: async () => ({}) },
+    state, accessPolicy: policy, createBot: () => bot, typingMiddleware: () => async (_ctx, next) => next(),
+    logger: { info() {}, warn() {}, error() {} },
+  });
+  t.after(() => runtime.stop());
+  await runtime.start();
+  const message = { kind: group ? 'group' : 'c2c', senderId: 'owner', content: '/m', messageId: 'open-menu',
+    groupOpenid: group ? 'group-one' : undefined,
+    rawEventType: group ? 'GROUP_AT_MESSAGE_CREATE' : 'C2C_MESSAGE_CREATE',
+    replyTarget: { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', msgId: 'open-menu' } };
+  await bot.listeners('message')[0]({ bot, message }, message);
+  const menu = bot.sent.find((entry) => entry.keyboard);
+  const button = menu.keyboard.content.rows.flatMap((row) => row.buttons)[4];
+  const event = (changes = {}) => ({ id: `callback-${++sequence}`, application_id: 'app', type: 11, version: 1,
+    scene: group ? 'group' : 'c2c', chat_type: group ? 1 : 2,
+    ...(group ? { group_openid: 'group-one', group_member_openid: 'owner' } : { user_openid: 'owner' }),
+    data: { type: 11, resolved: { button_id: button.id, button_data: button.action.data } }, ...changes });
+  const callback = (value = event()) => bot.listeners('interaction')[0]({ bot, event: value, state: {}, receivedAt: Date.now() }, value);
+  return { bot, runtime, acks, state, route, event, callback, cleared: () => cleared };
+}
+
+for (const group of [false, true]) {
+  test(`QQ runtime connects native ${group ? 'group' : 'private'} callbacks to existing menu commands`, async (t) => {
+    const f = await callbackRuntime(t, { group });
+    assert.equal(f.bot.listenerCount('interaction'), 1);
+    await f.callback(f.event(group ? { group_member_openid: 'other' } : { user_openid: 'other' }));
+    if (group) await f.callback(f.event({ group_openid: 'other-group' }));
+    assert.equal(f.cleared(), 0);
+    assert.ok(f.acks.every((item) => item.code === 4));
+    const valid = f.event();
+    await f.callback(valid);
+    await f.callback(valid);
+    assert.equal(f.state.sessionFor(f.route), null);
+    assert.equal(f.cleared(), 1);
+    assert.equal(f.acks.filter((item) => item.id === valid.id).length, 1);
+    const result = f.bot.sent.find((entry) => entry.content?.includes('已开启新会话'));
+    assert.deepEqual(result.target, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner' });
+    assert.equal(result.extra.event_id, valid.id);
+    assert.equal(result.target.msgId, undefined);
+    await f.callback();
+    assert.equal(f.acks.at(-1).code, 3);
+    assert.equal(f.cleared(), 1);
+  });
+}
+
+test('QQ callback executes the normal bridge permission recheck after ACK', async (t) => {
+  const policy = directAccessPolicy({ users: [{ id: 'owner', canExecuteCommands: true }] });
+  const f = await callbackRuntime(t, { policy, onAck: async () => {
+    policy.getSettings().direct.allowlist.users[0].canExecuteCommands = false;
+  } });
+  await f.callback();
+  assert.equal(f.acks[0].code, 0);
+  assert.equal(f.cleared(), 0);
+  assert.match(f.bot.sent.at(-1).content, /没有执行命令的权限/);
 });

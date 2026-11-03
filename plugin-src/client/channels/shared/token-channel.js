@@ -5,7 +5,7 @@ import * as React from 'react';
 import { CredentialActionIcon, CredentialBindingPanel } from '../../credential-binding.js';
 import { AccountSettingsToggle, CollapsibleAccountSection } from './collapsible-account.js';
 import { channelName, h, localizeTemplate, localizeText } from '../../i18n.js';
-import { installDingtalkStyles } from '../dingtalk/styles.js';
+import { installConnectionStyles } from './connection-styles.js';
 import { WorkspaceEditor } from '../../workspace-editor.js';
 import { ContextEnhancementEditor } from '../../context-enhancement.js';
 import {
@@ -207,13 +207,13 @@ export function createTokenChannelSettings(definition) {
     const workspaceFence = useWorkspaceSnapshotFence();
 
     React.useEffect(() => {
-      const disposeDingtalk = installDingtalkStyles();
+      const disposeConnection = installConnectionStyles();
       const disposeChannel = installStyles();
       mounted.current = true;
       return () => {
         mounted.current = false;
         disposeChannel();
-        disposeDingtalk();
+        disposeConnection();
       };
     }, []);
 

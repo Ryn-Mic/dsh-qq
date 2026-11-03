@@ -1,10 +1,11 @@
+import weixinDiagnostics from '../../src/channels/shared/i18n-en/helpers/weixin-diagnostics.mjs';
 import imageInput from '../../src/channels/shared/i18n-en/image-input.mjs';
 import diagnostics from '../../src/channels/shared/i18n-en/diagnostics.mjs';
-import weixinDiagnostics from '../../src/channels/weixin/connection-error.en.mjs';
 import { RU } from './i18n-ru.js';
 import * as React from 'react';
+import { QQ_EN } from './qq-enhancements-i18n.js';
 
-export const IM_LOCALE_NAMESPACE = 'dsh-im';
+export const IM_LOCALE_NAMESPACE = 'dsh-qq';
 
 // Sentences the settings UI composes itself: the dictionaries carry them as
 // templates with `{name}` placeholders, looked up like any other key and filled in
@@ -61,6 +62,7 @@ const COMPOSED = Object.freeze({
 });
 
 const EN = Object.freeze({
+  ...QQ_EN,
   ...COMPOSED,
   "私聊对象": "Private chat",
   "选择私聊对象": "Select a private chat",
@@ -89,8 +91,8 @@ const EN = Object.freeze({
   "还没有 DS Bot，请先在 DS Bot 中创建机器人后刷新。": "No bots yet. Create a bot in DS Bot, then refresh.",
   "DS Bot 暂不可用": "DS Bot unavailable",
 
-  ...weixinDiagnostics,
   ...diagnostics,
+  ...weixinDiagnostics,
   ...imageInput,
   '$locale': 'en',
   '侧边栏入口': 'Sidebar entry',
@@ -149,6 +151,7 @@ const EN = Object.freeze({
   '无需安装第三方服务；请按指引授予 macOS Messages 访问权限。': 'No third-party service is required; follow the guide to grant macOS Messages access.',
   'macOS Messages 权限': 'macOS Messages permissions',
   'IM机器人': 'IM bots',
+  '打开 QQ机器人': 'Open QQ bot',
   '打开 IM机器人': 'Open IM bots',
   'IM机器人设置': 'IM bot settings',
   'IM 面板加载失败': 'Could not load the IM panel',

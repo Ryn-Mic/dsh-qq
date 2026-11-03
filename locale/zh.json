@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "IM 机器人 (dsh-im)",
-    "description": "把微信、飞书、企微、钉钉、QQ、Telegram、WhatsApp、Slack、Discord、Matrix接入DSH。"
+    "title": "QQ 机器人 (dsh-qq)",
+    "description": "自用 QQ-only DeepSeek Harness 插件，提取自 xmanrui/dsh-im；不发布到 npm。"
   }
 }

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FeishuHarnessBridge } from '../src/channels/feishu/bridge.mjs';
 import { QqHarnessBridge } from '../src/channels/qq/qq-bridge.mjs';
 import { directAccessPolicy } from './channels/access-policy-fixture.mjs';
 
@@ -68,7 +67,7 @@ function fixture(channel, canExecuteCommands = true) {
   return { bridge, event, replies, commands, started, finishTurn };
 }
 
-for (const channel of ['feishu', 'qq']) {
+for (const channel of ['qq']) {
   test(`${channel} dispatches numbered permission commands locally and deduplicates them`, async () => {
     const f = fixture(channel);
     await f.bridge.accept(f.event('list', '/permissionlist'));

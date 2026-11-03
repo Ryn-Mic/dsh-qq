@@ -21,6 +21,7 @@
 import diagnostics from '../../src/channels/shared/i18n-ru/diagnostics.mjs';
 import imageInput from '../../src/channels/shared/i18n-ru/image-input.mjs';
 import weixinDiagnostics from '../../src/channels/shared/i18n-ru/weixin.mjs';
+import { QQ_RU } from './qq-enhancements-i18n.js';
 
 // Sentences the settings UI composes itself, as `{name}` templates: the key is the
 // Chinese template and the value keeps the placeholders of the English one.
@@ -165,6 +166,7 @@ const CLIENT = Object.freeze({
 
   // Plugin page, bot tabs and the access policy form.
   'IM机器人': 'IM-боты',
+  '打开 QQ机器人': 'Открыть бота QQ',
   '打开 IM机器人': 'Открыть IM-ботов',
   'IM机器人设置': 'Настройки IM-ботов',
   'IM 面板加载失败': 'Не удалось загрузить панель IM',
@@ -1679,4 +1681,4 @@ const SHARED = Object.freeze({
 
 // Client wording wins on a key both sides carry: the settings page may need a
 // shorter phrasing than a chat message does.
-export const RU = Object.freeze({ ...SHARED, ...CLIENT, '$locale': 'ru' });
+export const RU = Object.freeze({ ...SHARED, ...CLIENT, ...QQ_RU, '$locale': 'ru' });

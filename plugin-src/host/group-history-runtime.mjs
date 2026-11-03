@@ -7,7 +7,7 @@ const runtimes = new Map();
 
 export function getGroupHistoryStore(ctx, config = {}) {
   const home = resolve(config.dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'));
-  const root = join(home, 'integrations', 'dsh-im');
+  const root = join(home, 'integrations', 'dsh-qq');
   if (runtimes.has(root)) return runtimes.get(root);
   const logger = typeof ctx?.logger === 'function' ? ctx.logger('dsh-im:group-history') : ctx?.logger ?? console;
   const store = new GroupHistoryStore(root, { logger, copyService: getInboundTtlRuntime(ctx, config).service });

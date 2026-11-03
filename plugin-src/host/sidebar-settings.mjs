@@ -4,35 +4,14 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { registerManagementRpc } from '../management-rpc.mjs';
 
-import { PluginConfigStore } from '../../src/channels/feishu/plugin-config-store.mjs';
-import { WeixinConfigStore } from '../../src/channels/weixin/config-store.mjs';
-import { DingtalkConfigStore } from '../../src/channels/dingtalk/config-store.mjs';
-import { WecomConfigStore } from '../../src/channels/wecom/config-store.mjs';
-import { WecomAppConfigStore } from '../../src/channels/wecom-app/config-store.mjs';
 import { QqConfigStore } from '../../src/channels/qq/config-store.mjs';
-import { SlackConfigStore } from '../../src/channels/slack/config-store.mjs';
-import { TelegramConfigStore } from '../../src/channels/telegram/config-store.mjs';
-import { DiscordConfigStore } from '../../src/channels/discord/config-store.mjs';
-import { WhatsappConfigStore } from '../../src/channels/whatsapp/config-store.mjs';
-import { IMessageConfigStore } from '../../src/channels/imessage/config-store.mjs';
-import { EmailConfigStore } from '../../src/channels/email/config-store.mjs';
-import { MatrixConfigStore } from '../../src/channels/matrix/matrix-config-store.mjs';
-import { OfficeConfigStore } from '../../src/channels/office/config-store.mjs';
 
 export const SIDEBAR_SETTINGS_RPC_CHANNEL = '/dsh-im-sidebar';
 export const SIDEBAR_SETTINGS_ENDPOINTS = Object.freeze({
   get: 'settings.sidebar-entry.get', set: 'settings.sidebar-entry.set',
 });
 const MODES = new Set(['auto', 'show', 'hide']);
-const CHANNEL_STORES = [
-  ['feishu', PluginConfigStore], ['weixin', WeixinConfigStore],
-  ['dingtalk', DingtalkConfigStore], ['wecom', WecomConfigStore],
-  ['wecomApp', WecomAppConfigStore, 'wecom-app'], ['qq', QqConfigStore],
-  ['slack', SlackConfigStore], ['telegram', TelegramConfigStore],
-  ['discord', DiscordConfigStore], ['whatsapp', WhatsappConfigStore],
-  ['imessage', IMessageConfigStore], ['email', EmailConfigStore],
-  ['matrix', MatrixConfigStore], ['office', OfficeConfigStore],
-];
+const CHANNEL_STORES = [['qq', QqConfigStore]];
 
 function dshHome(config) {
   return resolve(config.dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'));
@@ -46,7 +25,7 @@ export async function hasConfiguredChannel(config = {}) {
     const options = { dshHome: dshHome(config), ...config[key] };
     const root = resolve(options.dataDir ?? join(dshHome(options), 'integrations', `dsh-${channel}`));
     const store = await new Store(resolve(options.configPath ?? join(root, 'config.json'))).load();
-    return key === 'office' ? store.get() !== null : store.list().length > 0;
+    return store.list().length > 0;
   }));
   if (results.some((result) => result.status === 'fulfilled' && result.value)) return true;
   // Unknown configuration must not be mistaken for deleting the last channel.
@@ -86,7 +65,7 @@ export class SidebarSettingsStore {
 }
 
 export function createSidebarSettingsRpcHandler({ config = {}, store, configured } = {}) {
-  store ??= new SidebarSettingsStore(join(dshHome(config), 'integrations', 'dsh-im', 'sidebar-settings.json'));
+  store ??= new SidebarSettingsStore(join(dshHome(config), 'integrations', 'dsh-qq', 'sidebar-settings.json'));
   configured ??= () => hasConfiguredChannel(config);
   return async (endpoint, payload, signal) => {
     const valid = payload && typeof payload === 'object' && !Array.isArray(payload)

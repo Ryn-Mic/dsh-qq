@@ -11,16 +11,7 @@ import { installProductionChannel } from '../../../plugin-src/host/channels/shar
 import { publicChannelInitializing, publicChannelStartupError } from '../../../plugin-src/host/channels/shared/startup-error.mjs';
 import { getImHostLanguage, setImHostLanguage } from '../../../src/channels/shared/i18n.mjs';
 
-const channels = await Promise.all([
-  ['feishu', 'PluginConfigStore', 'plugin-config-store'],
-  ['weixin', 'WeixinConfigStore'], ['dingtalk', 'DingtalkConfigStore'],
-  ['wecom', 'WecomConfigStore'], ['wecom-app', 'WecomAppConfigStore'],
-  ['qq', 'QqConfigStore'], ['slack', 'SlackConfigStore'],
-  ['telegram', 'TelegramConfigStore'], ['discord', 'DiscordConfigStore'],
-  ['whatsapp', 'WhatsappConfigStore'],
-  ['matrix', 'MatrixConfigStore', 'matrix-config-store'],
-  ['email', 'EmailConfigStore'], ['office', 'OfficeConfigStore'],
-].map(async ([id, storeName, storeFile = 'config-store']) => ({
+const channels = await Promise.all([['qq', 'QqConfigStore']].map(async ([id, storeName, storeFile = 'config-store']) => ({
   id,
   key: id === 'wecom-app' ? 'wecomApp' : id,
   apply: (await import(`../../../plugin-src/host/channels/${id}/index.mjs`)).apply,
@@ -188,53 +179,33 @@ for (const { id, apply, Store, api } of channels) {
   });
 }
 
-test('the composed host serves other real channels while Feishu is loading and after it fails', async t => {
+test('the QQ-only host mounts management while QQ loads and retains safe startup diagnostics', async t => {
   const f = await fixture(t);
   const gate = Promise.withResolvers();
-  const loaded = new Set();
-  const allLoaded = Promise.withResolvers();
-  const config = Object.fromEntries(channels.map(({ id, key, Store }) => {
-    class ConfigStore extends Store {
-      async load() {
-        if (id === 'feishu') {
-          await gate.promise;
-          throw new SyntaxError('private-secret');
-        }
-        await super.load();
-        loaded.add(id);
-        if (loaded.size === channels.length - 1) allLoaded.resolve();
-        return this;
-      }
-    }
-    return [key, f.config(id, { internals: { ConfigStore } })];
-  }));
+  const Store = channels[0].Store;
+  class ConfigStore extends Store {
+    async load() { await gate.promise; throw new SyntaxError('private-secret'); }
+  }
   const internals = Object.fromEntries([
-    'installUpdateRpc', 'installInboundTtlRpc', 'installDeliverySyncRpc', 'installDeliveryRpc', 'installDeliveryHttp',
+    'installInboundTtlRpc', 'installDeliverySyncRpc', 'installDeliveryRpc', 'installDeliveryHttp',
     'installSessionSyncCoordinator', 'installHostLanguage', 'installHostLanguageRpc',
   ].map(name => [name, () => {}]));
-  const fiber = f.start(createImHostPlugin(internals).apply, config);
+  const fiber = f.start(createImHostPlugin(internals).apply, {
+    qq: f.config('qq', { internals: { ConfigStore } }),
+  });
   try {
-    // Allow Cordis to enter its activation callback; Feishu stays gated.
     await new Promise(setImmediate);
-    assert.equal(f.routes.size, channels.length + 1);
+    assert.equal(f.routes.size, 2);
     assert.equal(f.routes.has('/dsh-im-sidebar'), true);
-    await allLoaded.promise;
-    assert.equal((await f.call('feishu')).error.code, 'feishu-initializing');
-    // Let the other channels finish their local workspace reconciliation.
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      if ((await f.call('telegram')).ok) break;
-      await new Promise(resolve => setTimeout(resolve, 5));
-    }
-    assert.equal((await f.call('telegram')).ok, true);
+    assert.equal((await f.call('qq')).error.code, 'qq-initializing');
     gate.resolve();
     await fiber.await();
-    assert.equal((await f.call('feishu')).error.code, 'feishu-startup-config-invalid');
-    for (const { id } of channels.filter(c => c.id !== 'feishu')) assert.equal((await f.call(id)).ok, true, id);
+    const failure = await f.call('qq');
+    assert.equal(failure.error.code, 'qq-startup-config-invalid');
+    assert.doesNotMatch(JSON.stringify(failure), /private-secret/);
     await fiber.dispose();
     assert.equal(f.routes.size, 0);
-  } finally {
-    gate.resolve();
-  }
+  } finally { gate.resolve(); }
 });
 
 test('startup rolls back prepared resources even when delivery cleanup fails', async t => {

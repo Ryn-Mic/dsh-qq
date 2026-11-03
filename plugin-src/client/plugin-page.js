@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { IM_LOCALE_NAMESPACE } from './i18n.js';
 
-export const IM_MAIN_PANEL_ID = 'xmanrui-dsh-im';
+export const IM_MAIN_PANEL_ID = 'ryn-mic-dsh-qq';
 const h = React.createElement;
 
 function OpenImAction({ subject, packageName, onOpen, t }) {
@@ -10,7 +10,7 @@ function OpenImAction({ subject, packageName, onOpen, t }) {
   if (subject.kind === 'row' && subject.row?.moduleName !== packageName) return null;
   return h('button', {
     type: 'button', className: 'dim-pluginOpen', onClick: onOpen,
-  }, t('打开 IM机器人'));
+  }, t('打开 QQ机器人'));
 }
 
 function ImPluginPage({ renderPanel }) {
@@ -65,7 +65,7 @@ export function installImPluginPage(ctx, { packageName, renderPanel, sidebarVisi
         stopSidebar = pageCtx.slots.inject('sidebar.panellist', () =>
           pageCtx.slots.register({
             name: 'sidebar.panellist', id: IM_MAIN_PANEL_ID,
-            order: 10, label: () => pageCtx.locale.bind(IM_LOCALE_NAMESPACE)('IM机器人'),
+            order: 10, label: () => pageCtx.locale.bind(IM_LOCALE_NAMESPACE)('QQ机器人'),
             locale: IM_LOCALE_NAMESPACE,
           }, ImSidebarIcon));
       };
@@ -73,7 +73,7 @@ export function installImPluginPage(ctx, { packageName, renderPanel, sidebarVisi
       update();
       const stopActions = pageCtx.slots.inject('plugins.detail.actions', () =>
         pageCtx.slots.register({
-          name: 'plugins.detail.actions', id: 'xmanrui-dsh-im-open',
+          name: 'plugins.detail.actions', id: 'ryn-mic-dsh-qq-open',
           order: 20, locale: IM_LOCALE_NAMESPACE,
           inject: () => ({
             packageName,

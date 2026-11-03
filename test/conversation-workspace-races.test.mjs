@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { dingtalkMenuSnapshot } from '../src/channels/dingtalk/dingtalk-menu.mjs';
 import { qqMenuView } from '../src/channels/qq/qq-menu.mjs';
 import {
   BotWorkspaceStore,
@@ -240,7 +239,7 @@ test('shared Session controls stay usable when the most recently bound conversat
   assert.equal(scope.state.sessionFor(otherKey), 'session-existing');
 });
 
-test('Dingtalk and QQ menus preserve shared Session models for the conversation left behind', async (t) => {
+test('QQ menus preserve shared Session models for the conversation left behind', async (t) => {
   const otherKey = 'direct:two';
   const { scope, workspaceB } = await fixture(t, {
     async listWorkspaces() { return []; },
@@ -250,8 +249,6 @@ test('Dingtalk and QQ menus preserve shared Session models for the conversation 
   await scope.harness.bindWorkspaceSession(KEY, 'session-existing');
   await scope.harness.switchConversationWorkspace(KEY, workspaceB);
 
-  const dingtalk = await dingtalkMenuSnapshot(scope.harness, scope.state, otherKey);
-  assert.deepEqual(dingtalk.selections.model, [['Model (provider)', '/model provider/model']]);
   const qqMain = await qqMenuView('main', scope.harness, scope.state, otherKey);
   assert.match(qqMain.detail, /当前模型：Model/);
   const qqModels = await qqMenuView('models', scope.harness, scope.state, otherKey);

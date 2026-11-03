@@ -1,3 +1,4 @@
+import { QqStateStore as StateStore } from '../src/channels/qq/state-store.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,10 +7,6 @@ import test from 'node:test';
 
 import { BotWorkspaceStore, createBotWorkspaceScope } from '../src/channels/shared/bot-workspace-store.mjs';
 import { runWorkspaceCommand } from '../src/channels/shared/workspace-command.mjs';
-import { FeishuHarnessBridge } from '../src/channels/feishu/bridge.mjs';
-import { StateStore } from '../src/channels/feishu/state-store.mjs';
-import { dingtalkMenuSnapshot } from '../src/channels/dingtalk/dingtalk-menu.mjs';
-import { DingtalkHarnessBridge } from '../src/channels/dingtalk/dingtalk-bridge.mjs';
 import { qqMenuView } from '../src/channels/qq/qq-menu.mjs';
 import { QqHarnessBridge } from '../src/channels/qq/qq-bridge.mjs';
 import { directAccessPolicy } from './channels/access-policy-fixture.mjs';
@@ -79,47 +76,8 @@ function feishuBridge(f) {
   };
 }
 
-test('Feishu accept uses /conv for /sessionlist while explicit selectors still win', async (t) => {
-  const f = await fixture(t);
-  const channel = feishuBridge(f);
-  await channel.send('conv-set', `/conv ${f.workspaceB}`);
-  assert.equal(f.workspaces.conversationWorkspaceFor(f.botId, 'p2p:ou_owner'), f.workspaceB);
 
-  await channel.send('sessions-default', '/sessionlist');
-  assert.equal(f.listedWorkspaces.at(-1), f.workspaceB);
-  assert.match(JSON.stringify(channel.sent.at(-1)), /session-B/u);
-  assert.doesNotMatch(JSON.stringify(channel.sent.at(-1)), /session-A/u);
 
-  await channel.send('sessions-explicit', `/sessionlist ${f.workspaceA}`);
-  assert.equal(f.listedWorkspaces.at(-1), f.workspaceA);
-  await channel.send('conv-clear', '/conv clear');
-  await channel.send('sessions-follow-default', '/sessionlist');
-  assert.equal(f.listedWorkspaces.at(-1), f.workspaceA);
-});
-
-test('Feishu main menu lists conversation sessions but keeps workspace settings bot-scoped', async (t) => {
-  const f = await fixture(t);
-  const channel = feishuBridge(f);
-  await channel.send('conv-set', `/conv ${f.workspaceB}`);
-  await channel.send('menu-open', '/m');
-  assert.deepEqual(f.listedWorkspaces, [f.workspaceB]);
-  assert.match(JSON.stringify(channel.sent.at(-1)), /session-B/u);
-  assert.doesNotMatch(JSON.stringify(channel.sent.at(-1)), /session-A/u);
-  assert.equal(f.harness.currentWorkspace(), f.workspaceA);
-});
-
-test('Dingtalk menu selects conversation sessions without changing its workspace setting', async (t) => {
-  const f = await fixture(t);
-  const key = 'direct:owner';
-  await runWorkspaceCommand(`/conv ${f.workspaceB}`, f.harness, key);
-  const menu = await dingtalkMenuSnapshot(f.harness, f.state, key);
-
-  assert.deepEqual(f.listedWorkspaces, [f.workspaceB]);
-  assert.ok(menu.selections.session.some(([, command]) => command === '/session session-B'));
-  assert.ok(!menu.selections.session.some(([, command]) => command === '/session session-A'));
-  assert.equal(menu.selections.workspace[menu.data.workspace_index][1], `/workspace ${f.workspaceA}`);
-  assert.equal(f.harness.currentWorkspace(), f.workspaceA);
-});
 
 test('QQ menus list conversation sessions while workspace choices retain the bot default', async (t) => {
   const f = await fixture(t);
@@ -138,48 +96,6 @@ test('QQ menus list conversation sessions while workspace choices retain the bot
   assert.equal(f.harness.currentWorkspace(), f.workspaceA);
 });
 
-test('Dingtalk rejects a previously displayed session choice after only /conv changes', async (t) => {
-  const f = await fixture(t);
-  const key = 'p2p:staff-owner';
-  const cards = [];
-  const updates = [];
-  const bridge = new DingtalkHarnessBridge({
-    api: {
-      async sendText() {},
-      async createMenuCard(card) { cards.push(card); return { cardInstanceId: 'menu-one' }; },
-      async updateMenuCard(card) { updates.push(card); },
-    },
-    clientId: 'test-client', clientSecret: 'test-secret',
-    harness: f.harness, state: f.state,
-    accessPolicy: directAccessPolicy({ users: [{ id: 'staff-owner', canExecuteCommands: true }] }),
-    logger: { warn() {}, info() {} },
-  });
-  const message = (msgId, content) => ({
-    msgId, msgtype: 'text', text: { content }, conversationType: '1',
-    conversationId: 'direct-conversation', senderStaffId: 'staff-owner',
-    sessionWebhook: 'https://oapi.dingtalk.com/robot/reply?ticket=test-fixture',
-  });
-  await bridge.accept(message('conv-before-menu', `/conv ${f.workspaceB}`));
-  await bridge.waitForIdle();
-  await bridge.accept(message('open-menu', '/m'));
-  await bridge.waitForIdle();
-  assert.equal(cards.length, 1);
-  assert.equal(f.state.sessionFor(key), null);
-  await bridge.accept(message('conv-after-menu', `/conv ${f.workspaceA}`));
-  await bridge.waitForIdle();
-  assert.equal(f.state.sessionFor(key), null);
-  await bridge.acceptCard({
-    outTrackId: 'menu-one', userId: 'staff-owner',
-    content: JSON.stringify({ cardPrivateData: { actionIds: ['session'], params: {
-      revision: cards[0].data.revision, session: { index: 1 },
-    } } }),
-  }, 'old-menu-selection');
-
-  assert.deepEqual(f.adoptedSessions, []);
-  assert.equal(f.harness.currentConversationWorkspace(key), f.workspaceA);
-  assert.equal(f.state.sessionFor(key), null);
-  assert.match(updates.at(-1).data.notice, /会话或工作区已变化/u);
-});
 
 test('QQ rejects an actor\'s old session menu after another group actor changes /conv', async (t) => {
   const f = await fixture(t);

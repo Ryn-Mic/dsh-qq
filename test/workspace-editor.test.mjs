@@ -1,3 +1,4 @@
+import { QqSettingsTab } from '../plugin-src/client/channels/qq/index.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as React from 'react';
@@ -11,7 +12,6 @@ import {
   WorkspaceDirectoryPickerContext,
   WorkspaceEditor,
 } from '../plugin-src/client/workspace-editor.js';
-import { DiscordSettingsTab } from '../plugin-src/client/channels/discord/index.js';
 import { en, setImTranslator } from '../plugin-src/client/i18n.js';
 
 const { act, create } = TestRenderer;
@@ -91,30 +91,30 @@ function buttonNamed(root, name) {
   return root.findAllByType('button').find((button) => textOf(button) === name);
 }
 
-function discordSnapshot(workspace) {
+function qqSnapshot(workspace) {
   return {
     revision: 1,
     bots: [{
-      botId: 'discord_test',
+      botId: 'qq_test',
       connected: true,
       state: 'connected',
       workspace,
       bot: { name: 'Harness Bot', username: 'HarnessBot', idMasked: '123•••' },
-      health: { summary: 'Discord Gateway 长连接运行正常', lastCheckedAt: Date.now() },
+      health: { summary: 'QQ Gateway 长连接运行正常', lastCheckedAt: Date.now() },
       error: null,
     }],
   };
 }
 
-function twoBotDiscordSnapshot(firstWorkspace) {
-  const first = discordSnapshot(firstWorkspace).bots[0];
+function twoBotQQSnapshot(firstWorkspace) {
+  const first = qqSnapshot(firstWorkspace).bots[0];
   return {
     revision: 1,
     bots: [
-      { ...first, botId: 'discord_first', bot: { ...first.bot, name: 'First Bot' } },
+      { ...first, botId: 'qq_first', bot: { ...first.bot, name: 'First Bot' } },
       {
         ...first,
-        botId: 'discord_second',
+        botId: 'qq_second',
         workspace: '/workspace/second',
         bot: { ...first.bot, name: 'Second Bot' },
       },
@@ -574,12 +574,12 @@ test('a status response started before saving cannot restore the old workspace',
   const rpcCall = async (endpoint) => {
     if (endpoint === 'connection.status') {
       statusCalls += 1;
-      if (statusCalls === 1) return { ok: true, value: discordSnapshot('/workspace/current') };
+      if (statusCalls === 1) return { ok: true, value: qqSnapshot('/workspace/current') };
       if (statusCalls === 2) return staleStatus.promise;
-      return { ok: true, value: discordSnapshot('/workspace/new') };
+      return { ok: true, value: qqSnapshot('/workspace/new') };
     }
     if (endpoint === 'bot.workspace.set') {
-      return { ok: true, value: discordSnapshot('/workspace/new') };
+      return { ok: true, value: qqSnapshot('/workspace/new') };
     }
     throw new Error(`Unexpected endpoint: ${endpoint}`);
   };
@@ -588,7 +588,7 @@ test('a status response started before saving cannot restore the old workspace',
   const picker = nativeDirectoryPicker('/workspace/new');
   await act(async () => {
     renderer = create(withDirectoryPicker(
-      React.createElement(DiscordSettingsTab, { rpcCall }),
+      React.createElement(QqSettingsTab, { rpcCall }),
       picker,
     ));
     await flushMicrotasks();
@@ -604,7 +604,7 @@ test('a status response started before saving cannot restore the old workspace',
   assert.equal(renderer.root.findByType('code').props.title, '/workspace/new');
 
   await act(async () => {
-    staleStatus.resolve({ ok: true, value: discordSnapshot('/workspace/old') });
+    staleStatus.resolve({ ok: true, value: qqSnapshot('/workspace/old') });
     await flushMicrotasks();
   });
   assert.equal(renderer.root.findByType('code').props.title, '/workspace/new');
@@ -625,12 +625,12 @@ test('an older reconnect snapshot from another bot cannot restore a saved worksp
       statusCalls += 1;
       return {
         ok: true,
-        value: twoBotDiscordSnapshot(statusCalls === 1 ? '/workspace/current' : '/workspace/new'),
+        value: twoBotQQSnapshot(statusCalls === 1 ? '/workspace/current' : '/workspace/new'),
       };
     }
     if (endpoint === 'bot.reconnect') return staleReconnect.promise;
     if (endpoint === 'bot.workspace.set') {
-      return { ok: true, value: twoBotDiscordSnapshot('/workspace/new') };
+      return { ok: true, value: twoBotQQSnapshot('/workspace/new') };
     }
     throw new Error(`Unexpected endpoint: ${endpoint}`);
   };
@@ -639,13 +639,13 @@ test('an older reconnect snapshot from another bot cannot restore a saved worksp
   const picker = nativeDirectoryPicker('/workspace/new');
   await act(async () => {
     renderer = create(withDirectoryPicker(
-      React.createElement(DiscordSettingsTab, { rpcCall }),
+      React.createElement(QqSettingsTab, { rpcCall }),
       picker,
     ));
     await flushMicrotasks();
   });
-  const firstCard = renderer.root.findByProps({ 'data-bot-id': 'discord_first' });
-  const secondCard = renderer.root.findByProps({ 'data-bot-id': 'discord_second' });
+  const firstCard = renderer.root.findByProps({ 'data-bot-id': 'qq_first' });
+  const secondCard = renderer.root.findByProps({ 'data-bot-id': 'qq_second' });
   await act(async () => {
     secondCard.findAllByType('button')
       .find((button) => button.children.join('') === '检查连接').props.onClick();
@@ -656,10 +656,10 @@ test('an older reconnect snapshot from another bot cannot restore a saved worksp
     await flushMicrotasks();
   });
 
-  staleReconnect.resolve({ ok: true, value: twoBotDiscordSnapshot('/workspace/old') });
+  staleReconnect.resolve({ ok: true, value: twoBotQQSnapshot('/workspace/old') });
   await act(async () => { await flushMicrotasks(); });
   assert.equal(
-    renderer.root.findByProps({ 'data-bot-id': 'discord_first' }).findByType('code').props.title,
+    renderer.root.findByProps({ 'data-bot-id': 'qq_first' }).findByType('code').props.title,
     '/workspace/new',
   );
   await act(async () => { renderer.unmount(); });
@@ -673,7 +673,7 @@ test('connection check requests a test message and shows its delivery result', a
     else globalThis.window = previousWindow;
   });
   const calls = [];
-  const snapshot = discordSnapshot('/workspace/current');
+  const snapshot = qqSnapshot('/workspace/current');
   const rpcCall = async (endpoint, payload) => {
     calls.push({ endpoint, payload });
     if (endpoint === 'connection.status') return { ok: true, value: snapshot };
@@ -685,17 +685,17 @@ test('connection check requests a test message and shows its delivery result', a
 
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(DiscordSettingsTab, { rpcCall }));
+    renderer = create(React.createElement(QqSettingsTab, { rpcCall }));
     await flushMicrotasks();
   });
-  const card = renderer.root.findByProps({ 'data-bot-id': 'discord_test' });
+  const card = renderer.root.findByProps({ 'data-bot-id': 'qq_test' });
   await act(async () => {
     buttonNamed(card, '检查连接').props.onClick();
     await flushMicrotasks();
   });
 
   assert.deepEqual(calls.find((call) => call.endpoint === 'bot.reconnect')?.payload, {
-    botId: 'discord_test',
+    botId: 'qq_test',
     sendTest: true,
   });
   assert.equal(
@@ -714,7 +714,7 @@ test('shared token target-unavailable feedback asks for any direct message', asy
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
   });
-  const snapshot = discordSnapshot('/workspace/current');
+  const snapshot = qqSnapshot('/workspace/current');
   const rpcCall = async (endpoint) => {
     if (endpoint === 'connection.status') return { ok: true, value: snapshot };
     if (endpoint === 'bot.reconnect') {
@@ -731,10 +731,10 @@ test('shared token target-unavailable feedback asks for any direct message', asy
 
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(DiscordSettingsTab, { rpcCall }));
+    renderer = create(React.createElement(QqSettingsTab, { rpcCall }));
     await flushMicrotasks();
   });
-  const card = renderer.root.findByProps({ 'data-bot-id': 'discord_test' });
+  const card = renderer.root.findByProps({ 'data-bot-id': 'qq_test' });
   await act(async () => {
     buttonNamed(card, 'Check connection').props.onClick();
     await flushMicrotasks();
@@ -758,13 +758,13 @@ test('shared token connection failures render a fixed English-safe notice', asyn
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
   });
-  const snapshot = discordSnapshot('/workspace/current');
+  const snapshot = qqSnapshot('/workspace/current');
   const rpcCall = async (endpoint) => {
     if (endpoint === 'connection.status') return { ok: true, value: snapshot };
     if (endpoint === 'bot.reconnect') {
       return {
         ok: false,
-        error: { code: 'discord-operation-failed', message: 'Discord 操作失败，请稍后重试。' },
+        error: { code: 'qq-operation-failed', message: 'QQ 操作失败，请稍后重试。' },
       };
     }
     throw new Error(`Unexpected endpoint: ${endpoint}`);
@@ -772,10 +772,10 @@ test('shared token connection failures render a fixed English-safe notice', asyn
 
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(DiscordSettingsTab, { rpcCall }));
+    renderer = create(React.createElement(QqSettingsTab, { rpcCall }));
     await flushMicrotasks();
   });
-  const card = renderer.root.findByProps({ 'data-bot-id': 'discord_test' });
+  const card = renderer.root.findByProps({ 'data-bot-id': 'qq_test' });
   await act(async () => {
     buttonNamed(card, 'Check connection').props.onClick();
     await flushMicrotasks();
@@ -795,7 +795,7 @@ test('an older reconnect snapshot cannot resurrect a bot deleted by a newer muta
     else globalThis.window = previousWindow;
   });
   const staleReconnect = deferred();
-  const initialSnapshot = twoBotDiscordSnapshot('/workspace/first');
+  const initialSnapshot = twoBotQQSnapshot('/workspace/first');
   const deletedSnapshot = { ...initialSnapshot, bots: initialSnapshot.bots.slice(1) };
   let statusCalls = 0;
   const rpcCall = async (endpoint) => {
@@ -810,11 +810,11 @@ test('an older reconnect snapshot cannot resurrect a bot deleted by a newer muta
 
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(DiscordSettingsTab, { rpcCall }));
+    renderer = create(React.createElement(QqSettingsTab, { rpcCall }));
     await flushMicrotasks();
   });
-  const firstCard = renderer.root.findByProps({ 'data-bot-id': 'discord_first' });
-  const secondCard = renderer.root.findByProps({ 'data-bot-id': 'discord_second' });
+  const firstCard = renderer.root.findByProps({ 'data-bot-id': 'qq_first' });
+  const secondCard = renderer.root.findByProps({ 'data-bot-id': 'qq_second' });
   await act(async () => {
     secondCard.findAllByType('button')
       .find((button) => button.children.join('') === '检查连接').props.onClick();
@@ -829,11 +829,11 @@ test('an older reconnect snapshot cannot resurrect a bot deleted by a newer muta
       .find((button) => button.children.join('') === '确认移除接入').props.onClick();
     await flushMicrotasks();
   });
-  assert.equal(renderer.root.findAllByProps({ 'data-bot-id': 'discord_first' }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ 'data-bot-id': 'qq_first' }).length, 0);
 
   staleReconnect.resolve({ ok: true, value: initialSnapshot });
   await act(async () => { await flushMicrotasks(); });
-  assert.equal(renderer.root.findAllByProps({ 'data-bot-id': 'discord_first' }).length, 0);
+  assert.equal(renderer.root.findAllByProps({ 'data-bot-id': 'qq_first' }).length, 0);
   await act(async () => { renderer.unmount(); });
 });
 
@@ -936,7 +936,7 @@ test('AgentPresetEditor saves a selected preset and can follow the Host default'
   renderer.unmount();
 });
 
-test('Discord settings save an Agent Preset through bot.preset.set', async (t) => {
+test('QQ settings save an Agent Preset through bot.preset.set', async (t) => {
   const previousWindow = globalThis.window;
   globalThis.window = { setInterval() { return 1; }, clearInterval() {} };
   t.after(() => {
@@ -944,7 +944,7 @@ test('Discord settings save an Agent Preset through bot.preset.set', async (t) =
     else globalThis.window = previousWindow;
   });
   const snapshot = {
-    ...discordSnapshot('/workspace/current'),
+    ...qqSnapshot('/workspace/current'),
     agentPresetCatalog: PRESET_CATALOG,
   };
   const calls = [];
@@ -965,10 +965,10 @@ test('Discord settings save an Agent Preset through bot.preset.set', async (t) =
 
   let renderer;
   await act(async () => {
-    renderer = create(React.createElement(DiscordSettingsTab, { rpcCall }));
+    renderer = create(React.createElement(QqSettingsTab, { rpcCall }));
     await flushMicrotasks();
   });
-  const card = renderer.root.findByProps({ 'data-bot-id': 'discord_test' });
+  const card = renderer.root.findByProps({ 'data-bot-id': 'qq_test' });
   await act(async () => {
     card.findByProps({ className: 'dim-presetSelect' })
       .props.onChange({ target: { value: 'coding' } });
@@ -976,7 +976,7 @@ test('Discord settings save an Agent Preset through bot.preset.set', async (t) =
   });
 
   assert.deepEqual(calls.find((call) => call.endpoint === 'bot.preset.set')?.payload, {
-    botId: 'discord_test',
+    botId: 'qq_test',
     agentPreset: 'coding',
   });
   await act(async () => { renderer.unmount(); });

@@ -13,7 +13,7 @@ const runtimes = new Map();
  */
 export function inboundTtlSettingsPath(config = {}) {
   const dshHome = resolve(config.dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'));
-  return resolve(dshHome, 'integrations', 'dsh-im', 'settings.json');
+  return resolve(dshHome, 'integrations', 'dsh-qq', 'settings.json');
 }
 
 /**

@@ -682,7 +682,7 @@ for (const scenario of ['aliases', 'multiple-chats', 'unresolved', 'unsupported'
   });
 }
 
-for (const channel of ['feishu', 'weixin', 'dingtalk', 'wecom', 'wecom-app', 'qq', 'telegram', 'slack', 'discord', 'whatsapp', 'matrix']) {
+for (const channel of ['qq']) {
   test(`${channel}: one real bound private chat gets one approval despite target aliases`, async () => {
     const service = createDeliveryService();
     const { adapter, offers, notices } = approvalAdapter(channel, ['private:actor', 'private:actor']);
