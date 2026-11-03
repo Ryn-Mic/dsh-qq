@@ -8,13 +8,13 @@ const recoverableMenuReasons = new Set(['expired', 'unknown-token', 'context-cha
 const diagnosticReasons = new Set([
   ...recoverableMenuReasons, 'already-used', 'actor-mismatch', 'route-mismatch', 'invalid-choice', 'unpublished',
   'invalid-event', 'app-mismatch', 'invalid-button-data', 'invalid-command', 'button-id-mismatch',
-  'invalid-route', 'invalid-actor', 'invalid-menu', 'validation-failed', 'permission-denied', 'accepted',
+  'invalid-route', 'invalid-actor', 'invalid-menu', 'missing-envelope-id', 'validation-failed', 'permission-denied', 'accepted',
 ]);
 
 // SDK 1.0.4 forwards INTERACTION_CREATE unchanged. QQ private/group button
 // callbacks use type=11, data.type=11, chat_type=2/1 respectively. Only the
 // platform fields identify the actor and reply route; button_data is untrusted.
-export function qqMenuInteraction(event, appId) {
+export function qqMenuInteraction(event, appId, { transportEventId } = {}) {
   // The platform documents version 1 as its default; an explicit different
   // version is not compatible with this parser.
   if (!nonEmpty(event?.id) || event?.type !== 11 || event?.data?.type !== 11
@@ -40,8 +40,9 @@ export function qqMenuInteraction(event, appId) {
     if (nonEmpty(event.group_openid) || nonEmpty(event.group_member_openid)) return rejected('invalid-route');
   }
   if (!actor || !targetId) return rejected('invalid-actor');
+  if (!nonEmpty(transportEventId)) return rejected('missing-envelope-id');
   return { ...parsed, kind, actor, route: `${kind}:${targetId}`,
-    target: { scope: kind, targetId, eventId: nonEmpty(event.id) }, text: `/m pick ${parsed.token} ${parsed.number}` };
+    target: { scope: kind, targetId, eventId: transportEventId }, text: `/m pick ${parsed.token} ${parsed.number}` };
 }
 
 function awaitAcknowledgement(task, remainingMs, signal) {
@@ -94,7 +95,7 @@ export function createQqInteractionHandler({
     // Reserve before any await, including failed ACKs: never ACK the same
     // provider event twice or execute after an uncertain acknowledgement.
     acknowledged.add(id);
-    const choice = qqMenuInteraction(event, appId);
+    const choice = qqMenuInteraction(event, appId, { transportEventId: ctx.transportEventId });
     let decision = choice;
     if (!choice.error) {
       const access = accessPolicy ? evaluateInboundAccess(accessPolicy, {

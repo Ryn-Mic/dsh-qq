@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 import { QQBot } from '@tencent-connect/qqbot-nodejs';
 import { createEventAwareBot } from '../../../src/channels/qq/event-aware-bot.mjs';
@@ -108,6 +109,7 @@ for (const group of [false, true]) {
         // Use the SDK's custom transport port; no WebSocket or QQ connection
         // is opened. Every token/ACK/message fetch is intercepted above.
         const transport = { start: async () => {
+          native.gateway = { currentWs: new EventEmitter() };
           await native.emit('ready', {});
           await new Promise((resolve) => native.abortController.signal.addEventListener('abort', resolve, { once: true }));
         } };
@@ -131,29 +133,34 @@ for (const group of [false, true]) {
         ...(group ? { group_openid: 'group-one', group_member_openid: 'owner' } : { user_openid: 'owner' }),
         data: { type: 11, resolved: { button_id: button.id, button_data: button.action.data } } };
     };
-    const dispatch = (value) => native.emit('interaction', { bot: native, event: value, state: {}, receivedAt: Date.now() }, value);
+    const dispatch = (value) => {
+      native.gateway.currentWs.emit('message', JSON.stringify({ op: 0, t: 'INTERACTION_CREATE', id: `transport:${value.id}`, d: value }));
+      return native.emit('interaction', { bot: native, event: value, state: {}, receivedAt: Date.now() }, value);
+    };
     const section = event(latestMenu(), 1);
     await dispatch(section);
-    assert.equal(latestMenu().body.event_id, section.id);
+    assert.equal(latestMenu().body.event_id, `transport:${section.id}`);
     const back = event(latestMenu(), 1);
     await dispatch(back);
-    assert.equal(latestMenu().body.event_id, back.id);
+    assert.equal(latestMenu().body.event_id, `transport:${back.id}`);
     const fresh = event(latestMenu(), 5);
     await dispatch(fresh);
     assert.equal(cleared, 1);
     const result = f.messages().findLast((call) => call.body.content?.includes('已开启新会话'));
-    assert.equal(result.body.event_id, fresh.id);
+    assert.equal(result.body.event_id, `transport:${fresh.id}`);
     const repeat = { ...fresh, id: `event-${++sequence}` };
     await dispatch(repeat);
-    assert.equal(f.messages().at(-1).body.event_id, repeat.id);
+    assert.equal(f.messages().at(-1).body.event_id, `transport:${repeat.id}`);
     assert.match(f.messages().at(-1).body.content, /过期/u);
-    await sendMarkdownReply(createEventAwareBot(native), qqMenuInteraction(fresh, 'synthetic-app').target, '**callback Markdown**', { logger });
+    await sendMarkdownReply(createEventAwareBot(native), qqMenuInteraction(fresh, 'synthetic-app', {
+      transportEventId: `transport:${fresh.id}`,
+    }).target, '**callback Markdown**', { logger });
     const callbackMessages = f.messages().filter((call) => call.body.event_id);
     assert.equal(callbackMessages.length, 5);
     assert.equal(f.deniedPushes(), 1);
     assert.ok(callbackMessages.every((call) => !Object.hasOwn(call.body, 'msg_id')));
     assert.equal(callbackMessages.at(-1).body.markdown.content, '**callback Markdown**');
-    assert.equal(callbackMessages.at(-1).body.event_id, fresh.id);
+    assert.equal(callbackMessages.at(-1).body.event_id, `transport:${fresh.id}`);
     assert.ok(callbackMessages.every((call) => call.path === `/v2/${group ? 'groups/group-one' : 'users/owner'}/messages`));
   });
 }

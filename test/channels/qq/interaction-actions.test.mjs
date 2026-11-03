@@ -54,7 +54,8 @@ function fixture({ group = false, policy, ack, execute, signal, acknowledgementD
     data: { type: 11, resolved: { button_data: `/m pick ${entry.token} 1`, button_id: `${entry.token}_1` } },
     ...changes,
   });
-  const handle = (eventValue = event(), contextChanges = {}) => handler({ bot, event: eventValue, state: {}, receivedAt: time, ...contextChanges }, eventValue);
+  const handle = (eventValue = event(), contextChanges = {}) => handler({ bot, event: eventValue, state: {}, receivedAt: time,
+    transportEventId: `transport:${eventValue.id}`, ...contextChanges }, eventValue);
   return { bot, bridge, handler, handle, event, context, entry, store, messages, acknowledgements, executed, refreshed, diagnostics, order,
     advance: (ms) => { time += ms; } };
 }
@@ -70,7 +71,7 @@ for (const group of [false, true]) {
     assert.deepEqual(f.acknowledgements, [{ id: event.id, code: 0 }]);
     assert.deepEqual(f.order, ['ack', 'accept']);
     const message = f.messages[0];
-    assert.deepEqual(message.replyTarget, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', eventId: event.id });
+    assert.deepEqual(message.replyTarget, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', eventId: `transport:${event.id}` });
     assert.equal(message.messageId, `qq-interaction:${event.id}`);
     assert.equal(message.replyTarget.msgId, undefined);
     assert.equal(message.senderId, 'owner');
@@ -110,7 +111,7 @@ test('QQ callback parser rejects malformed commands, mismatched button IDs and n
     { data: { type: 11, resolved: { button_data: `/m pick ${f.entry.token} 1`, button_id: null } } },
     { data: { type: 11, resolved: { button_data: `/m pick ${f.entry.token} 1`, button_id: ` ${f.entry.token}_1` } } },
     { scene: 'group' }, { chat_type: 0 },
-  ]) assert.equal(qqMenuInteraction(f.event(changes), 'app').code, 1);
+  ]) assert.equal(qqMenuInteraction(f.event(changes), 'app', { transportEventId: 'transport-id' }).code, 1);
 });
 
 for (const group of [false, true]) {
@@ -167,7 +168,7 @@ test('QQ stale callback recovery only reopens a safe menu after ACK and preserve
     assert.equal(f.refreshed.length, 1);
     assert.equal(f.refreshed[0].content, '/m');
     assert.deepEqual(f.refreshed[0].raw, { content: '/m' });
-    assert.deepEqual(f.refreshed[0].replyTarget, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', eventId: event.id });
+    assert.deepEqual(f.refreshed[0].replyTarget, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', eventId: `transport:${event.id}` });
     assert.equal(f.entry.used, false);
   }
 });
@@ -291,4 +292,16 @@ test('QQ callback context must be the SDK event context for the current bot', as
   await f.handle(f.event(), { event: {} });
   await f.handle(f.event({ type: 13 }));
   assert.equal(f.acknowledgements.length, 0);
+});
+
+test('QQ missing trusted envelope metadata fails closed and cannot use payload fields as reply IDs', async () => {
+  const f = fixture();
+  const event = f.event({ transportEventId: 'untrusted-payload-field', event_id: 'untrusted-event-id' });
+  assert.equal(qqMenuInteraction(event, 'app').reason, 'missing-envelope-id');
+  await f.handle(event, { transportEventId: undefined });
+  assert.deepEqual(f.acknowledgements, [{ id: event.id, code: 1 }]);
+  assert.deepEqual(f.messages, []);
+  assert.deepEqual(f.executed, []);
+  assert.deepEqual(f.refreshed, []);
+  assert.equal(f.entry.used, false);
 });

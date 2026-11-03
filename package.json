@@ -1,6 +1,6 @@
 {
   "name": "@ryn-mic/dsh-qq",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "icon": "./assets/logo-plugin-message-link-gradient.webp",
   "description": "A personal QQ-only plugin for DeepSeek Harness, forked from xmanrui/dsh-im.",
   "keywords": [

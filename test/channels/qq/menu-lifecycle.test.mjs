@@ -62,7 +62,7 @@ async function fixture(t) {
     const event = { id: `interaction-${++sequence}`, application_id: 'synthetic-app', type: 11, version: 1,
       chat_type: 2, scene: 'c2c', user_openid: 'synthetic-owner',
       data: { type: 11, resolved: { button_data: button.action.data, button_id: button.id } } };
-    return handler({ bot, event, receivedAt: Date.now() }, event);
+    return handler({ bot, event, receivedAt: Date.now(), transportEventId: `frame:${event.id}:opaque` }, event);
   };
   return { state, sent, acks, calls, sessions, harness, bot, send, latest, click,
     moveWorkspace: () => { workspace = other; },

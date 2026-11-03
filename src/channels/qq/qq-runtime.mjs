@@ -12,6 +12,7 @@ import { isQqMessageAddressed, normalizeQqMentions } from './qq-mention.mjs';
 import { sendMarkdownReply } from './markdown-reply.mjs';
 import { createQqInteractionHandler } from './interaction-actions.mjs';
 import { acknowledgeQqInteraction } from './interaction-ack.mjs';
+import { createQqInteractionEnvelopeTracker } from './interaction-envelope.mjs';
 import { QqExtendedApi } from './qq-extended-api.mjs';
 import { createEventAwareBot } from './event-aware-bot.mjs';
 
@@ -218,10 +219,16 @@ export class QqRuntime {
     await atConnectionStage('harness.check', () => this.#harness.ensureRunning());
     this.#status.harnessReachable = true;
 
+    let interactionEnvelopes;
     const sdkLogger = {
       error: (...args) => this.#logger.error?.(...args),
       warn: (...args) => this.#logger.warn?.(...args),
-      info: (...args) => this.#logger.info?.(...args),
+      info: (...args) => {
+        // SDK 1.0.4 logs socket open before reading frames. Attach here so
+        // replayed interactions preceding RESUMED keep their outer event ID.
+        interactionEnvelopes?.attach();
+        return this.#logger.info?.(...args);
+      },
       debug: () => {},
     };
     const bot = this.#createBot({
@@ -241,6 +248,8 @@ export class QqRuntime {
     const controller = new AbortController();
     this.#abortController = controller;
     this.#bot = bot;
+    interactionEnvelopes = createQqInteractionEnvelopeTracker({ bot });
+    controller.signal.addEventListener('abort', () => interactionEnvelopes.dispose(), { once: true });
     const replyBot = createEventAwareBot(bot);
     this.#bridge = new QqHarnessBridge({
       bot: replyBot,
@@ -290,6 +299,7 @@ export class QqRuntime {
       readyReject = reject;
     });
     const onReady = (data) => {
+      interactionEnvelopes.attach();
       if (typeof data?.user?.id === 'string' && data.user.id.trim()) {
         botMentionIds.add(data.user.id.trim());
       }
@@ -330,7 +340,8 @@ export class QqRuntime {
         acknowledgeQqInteraction({ bot, interactionId, code, ...options, fetchImpl: this.#interactionFetchImpl }),
     });
     const onInteraction = (ctx, event) => {
-      const task = handleInteraction(ctx, event).catch((error) => {
+      const interactionContext = { ...ctx, transportEventId: interactionEnvelopes.replyEventIdFor(event) };
+      const task = handleInteraction(interactionContext, event).catch((error) => {
         if (!controller.signal.aborted) this.#logger.error?.(
           `[dsh-im:qq] bot ${this.#config.botId} interaction handling failed:`,
           extractConnectionEvidence(error).details,

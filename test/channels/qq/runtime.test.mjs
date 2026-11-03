@@ -358,6 +358,7 @@ test('QQ message handlers keep SDK typing alive through work and cancel it on st
 
 async function callbackRuntime(t, { group = false, policy, onAck, buttonNumber = 5 } = {}) {
   const bot = new FakeBot();
+  bot.gateway = { currentWs: new EventEmitter() };
   const acks = [];
   const route = group ? 'group:group-one' : 'c2c:owner';
   const sessions = new Map([[route, 'session-original']]);
@@ -377,7 +378,10 @@ async function callbackRuntime(t, { group = false, policy, onAck, buttonNumber =
     harness: { ensureRunning: async () => true, currentWorkspace: () => '/workspace',
       listWorkspaceSessions: async () => ({ sessions: [] }),
       listModels: async () => ({ current: {}, groups: [] }), agentPresetSettings: async () => ({}) },
-    state, accessPolicy: policy, createBot: () => bot, typingMiddleware: () => async (_ctx, next) => next(),
+    state, accessPolicy: policy, createBot: (options) => {
+      bot.protocolLogger = options.logger;
+      return bot;
+    }, typingMiddleware: () => async (_ctx, next) => next(),
     interactionFetchImpl: async (url, options) => {
       assert.equal(options.method, 'PUT');
       assert.equal(options.redirect, 'error');
@@ -405,7 +409,12 @@ async function callbackRuntime(t, { group = false, policy, onAck, buttonNumber =
     scene: group ? 'group' : 'c2c', chat_type: group ? 1 : 2,
     ...(group ? { group_openid: 'group-one', group_member_openid: 'owner' } : { user_openid: 'owner' }),
     data: { type: 11, resolved: { button_id: button.id, button_data: button.action.data } }, ...changes });
-  const callback = (value = event()) => bot.listeners('interaction')[0]({ bot, event: value, state: {}, receivedAt: Date.now() }, value);
+  const callback = (value = event()) => {
+    bot.gateway.currentWs.emit('message', Buffer.from(JSON.stringify({
+      op: 0, t: 'INTERACTION_CREATE', id: `frame:${value.id}:opaque`, d: value,
+    })));
+    return bot.listeners('interaction')[0]({ bot, event: value, state: {}, receivedAt: Date.now() }, value);
+  };
   return { bot, runtime, acks, state, route, event, callback, cleared: () => cleared };
 }
 
@@ -419,7 +428,7 @@ for (const group of [false, true]) {
       const reply = f.bot.sent.at(-1);
       assert.match(reply.markdown.content, title);
       assert.ok(reply.keyboard.content.rows.length);
-      assert.equal(reply.extra.event_id, event.id);
+      assert.equal(reply.extra.event_id, `frame:${event.id}:opaque`);
       assert.equal(reply.target.msgId, undefined);
       assert.equal(f.cleared(), 0);
     });
@@ -439,13 +448,41 @@ for (const group of [false, true]) {
     assert.equal(f.acks.filter((item) => item.id === valid.id).length, 1);
     const result = f.bot.sent.find((entry) => entry.content?.includes('已开启新会话'));
     assert.deepEqual(result.target, { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner' });
-    assert.equal(result.extra.event_id, valid.id);
+    assert.equal(result.extra.event_id, `frame:${valid.id}:opaque`);
     assert.equal(result.target.msgId, undefined);
     await f.callback();
     assert.equal(f.acks.at(-1).code, 3);
     assert.equal(f.cleared(), 1);
   });
 }
+
+test('QQ runtime requires a captured Gateway envelope rather than caller-supplied transport metadata', async (t) => {
+  const f = await callbackRuntime(t);
+  const event = f.event();
+  await f.bot.listeners('interaction')[0]({
+    bot: f.bot, event, receivedAt: Date.now(), transportEventId: 'untrusted-transport-id',
+  }, event);
+  assert.equal(f.cleared(), 0);
+  assert.equal(f.acks.at(-1).code, 1);
+});
+
+test('QQ runtime captures replayed interactions before RESUMED and removes socket listeners on stop', async (t) => {
+  const f = await callbackRuntime(t, { buttonNumber: 13 });
+  const previousSocket = f.bot.gateway.currentWs;
+  assert.equal(previousSocket.listenerCount('message'), 1);
+  const replacement = new EventEmitter();
+  f.bot.gateway.currentWs = replacement;
+  f.bot.protocolLogger.info('synthetic socket opened');
+  assert.equal(previousSocket.listenerCount('message'), 0);
+  assert.equal(replacement.listenerCount('message'), 1);
+  const event = f.event();
+  await f.callback(event);
+  assert.equal(f.bot.sent.at(-1).extra.event_id, `frame:${event.id}:opaque`);
+  f.bot.emit('resumed');
+  assert.equal(replacement.listenerCount('message'), 1);
+  await f.runtime.stop();
+  assert.equal(replacement.listenerCount('message'), 0);
+});
 
 test('QQ callback executes the normal bridge permission recheck after ACK', async (t) => {
   const policy = directAccessPolicy({ users: [{ id: 'owner', canExecuteCommands: true }] });

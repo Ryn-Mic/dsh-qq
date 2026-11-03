@@ -9,7 +9,7 @@ The plugin retains QQ messaging and QR/manual credential binding, shared session
 Use the reviewed `.tgz` artifact from this fork. This repository task does not install the plugin or connect a bot automatically.
 
 ```sh
-dsh plugin --profile web add --save-exact /absolute/path/ryn-mic-dsh-qq-0.1.2.tgz
+dsh plugin --profile web add --save-exact /absolute/path/ryn-mic-dsh-qq-0.1.3.tgz
 ```
 
 Alternatively, install the feature branch containing the extraction:

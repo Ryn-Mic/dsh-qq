@@ -6,10 +6,12 @@ import { QQBot } from '@tencent-connect/qqbot-nodejs';
 import { acknowledgeQqInteraction } from '../../../src/channels/qq/interaction-ack.mjs';
 import { createQqInteractionHandler } from '../../../src/channels/qq/interaction-actions.mjs';
 import { createEventAwareBot } from '../../../src/channels/qq/event-aware-bot.mjs';
+import { createQqInteractionEnvelopeTracker } from '../../../src/channels/qq/interaction-envelope.mjs';
 
 const logger = { info() {}, warn() {}, error() {}, debug() {} };
 
-async function offlineGateway(t, { status = 204, body = '', delay = 0, abortOnAck = false, networkFailure = false } = {}) {
+async function offlineGateway(t, { status = 204, body = '', delay = 0, abortOnAck = false, networkFailure = false,
+  beforeReady = false, resume = false } = {}) {
   const calls = [];
   const timers = new Set();
   const actionController = new AbortController();
@@ -45,6 +47,11 @@ async function offlineGateway(t, { status = 204, body = '', delay = 0, abortOnAc
     }
     assert.equal(req.url, '/v2/users/offline-owner/messages');
     res.setHeader('Content-Type', 'application/json');
+    if (JSON.parse(raw).event_id !== 'offline-outer-envelope') {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ code: 40034025, message: 'event_id invalid' }));
+      return;
+    }
     res.end(JSON.stringify({ id: 'offline-reply' }));
   });
   const wss = new WebSocketServer({ server });
@@ -52,16 +59,25 @@ async function offlineGateway(t, { status = 204, body = '', delay = 0, abortOnAc
     ws.send(JSON.stringify({ op: 10, d: { heartbeat_interval: 60_000 } }));
     ws.on('message', (raw) => {
       const payload = JSON.parse(raw);
-      if (payload.op !== 2) return;
+      if (![2, 6].includes(payload.op)) return;
       intents = payload.d.intents;
-      ws.send(JSON.stringify({ op: 0, s: 1, t: 'READY', d: { session_id: 'offline-session', user: { id: 'offline-user' } } }));
-      ws.send(JSON.stringify({ op: 0, s: 2, t: 'INTERACTION_CREATE', d: event }));
+      const ready = { op: 0, s: 1, t: resume ? 'RESUMED' : 'READY',
+        d: resume ? {} : { session_id: 'offline-session', user: { id: 'offline-user' } } };
+      const callback = { op: 0, s: 2, t: 'INTERACTION_CREATE', id: 'offline-outer-envelope', d: event };
+      for (const frame of beforeReady ? [callback, ready] : [ready, callback]) ws.send(JSON.stringify(frame));
     });
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const bot = new QQBot({ appId: 'offline-app', appSecret: 'offline-secret', baseUrl: origin, tokenBaseUrl: origin, logger });
+  let envelopes;
+  const sdkLogger = { ...logger, info: () => envelopes?.attach() };
+  const bot = new QQBot({ appId: 'offline-app', appSecret: 'offline-secret', baseUrl: origin, tokenBaseUrl: origin,
+    logger: sdkLogger, ...(resume ? { sessionPersistence: { load: () => ({ sessionId: 'offline-session', lastSeq: 1 }),
+      save() {}, clear() {} } } : {}) });
   const replyBot = createEventAwareBot(bot);
+  envelopes = createQqInteractionEnvelopeTracker({ bot });
+  bot.on('ready', () => envelopes.attach());
+  bot.on('resumed', () => envelopes.attach());
   let accepted = 0;
   let context;
   let complete;
@@ -82,11 +98,13 @@ async function offlineGateway(t, { status = 204, body = '', delay = 0, abortOnAc
   });
   bot.on('interaction', async (ctx, value) => {
     context = { sameBot: ctx.bot === bot, sameEvent: ctx.event === value, milliseconds: Math.abs(Date.now() - ctx.receivedAt) < 1_000 };
-    complete(await handler(ctx, value));
+    try { complete(await handler({ ...ctx, transportEventId: envelopes.replyEventIdFor(value) }, value)); }
+    catch (error) { complete({ businessError: { httpStatus: error.httpStatus, bizCode: error.bizCode } }); }
   });
   const run = bot.start(connectionController.signal);
   t.after(async () => {
     connectionController.abort();
+    envelopes.dispose();
     await run;
     for (const timer of timers) clearTimeout(timer);
     for (const client of wss.clients) client.terminate();
@@ -103,6 +121,16 @@ async function offlineGateway(t, { status = 204, body = '', delay = 0, abortOnAc
   } finally { clearTimeout(timeout); }
 }
 
+for (const resume of [false, true]) {
+  test(`real SDK open-info envelope hook captures interaction before ${resume ? 'RESUMED replay finishes' : 'READY'}`, async (t) => {
+    const f = await offlineGateway(t, { beforeReady: true, resume });
+    assert.deepEqual(f.result, { code: 0, acknowledged: true });
+    assert.equal(f.accepted, 1);
+    assert.equal(f.calls[0].path, '/interactions/offline-interaction');
+    assert.equal(f.calls[1].body.event_id, 'offline-outer-envelope');
+  });
+}
+
 for (const [status, body] of [[204, ''], [200, ''], [200, '{}'], [200, '{"code":0}'], [200, '{"err_code":0}']]) {
   test(`real SDK gateway ACK HTTP ${status} ${body || 'empty'} runs business and delivers its event reply`, async (t) => {
     const f = await offlineGateway(t, { status, body });
@@ -112,7 +140,8 @@ for (const [status, body] of [[204, ''], [200, ''], [200, '{}'], [200, '{"code":
     assert.equal(f.accepted, 1);
     assert.deepEqual(f.calls.map(({ method }) => method), ['PUT', 'POST']);
     assert.deepEqual(f.calls[0].body, { code: 0 });
-    assert.equal(f.calls[1].body.event_id, 'offline-interaction');
+    assert.equal(f.calls[0].path, '/interactions/offline-interaction');
+    assert.equal(f.calls[1].body.event_id, 'offline-outer-envelope');
     assert.equal(f.calls[1].body.content, 'offline action result');
     assert.equal(Object.hasOwn(f.calls[1].body, 'msg_id'), false);
   });
