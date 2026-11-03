@@ -356,7 +356,7 @@ test('QQ message handlers keep SDK typing alive through work and cancel it on st
   assert.equal(typingCount, countAfterStop);
 });
 
-async function callbackRuntime(t, { group = false, policy, onAck } = {}) {
+async function callbackRuntime(t, { group = false, policy, onAck, buttonNumber = 5 } = {}) {
   const bot = new FakeBot();
   const acks = [];
   const route = group ? 'group:group-one' : 'c2c:owner';
@@ -369,7 +369,8 @@ async function callbackRuntime(t, { group = false, policy, onAck } = {}) {
     clearSession: async (key) => { cleared++; sessions.delete(key); },
   };
   bot.send = async (request) => { bot.sent.push(request); return { id: `sent-${bot.sent.length}` }; };
-  bot.acknowledgeInteraction = async (id, code) => { acks.push({ id, code }); await onAck?.(id, code); };
+  bot.api = { getToken: async () => 'synthetic-access-token' };
+  bot.acknowledgeInteraction = async () => { throw new Error('SDK JSON-only acknowledgement must not be used'); };
   let sequence = 0;
   const runtime = new QqRuntime({
     config: { botId: 'qq_bot', appId: 'app', ownerUserOpenid: 'owner' }, appSecret: 'secret',
@@ -377,6 +378,18 @@ async function callbackRuntime(t, { group = false, policy, onAck } = {}) {
       listWorkspaceSessions: async () => ({ sessions: [] }),
       listModels: async () => ({ current: {}, groups: [] }), agentPresetSettings: async () => ({}) },
     state, accessPolicy: policy, createBot: () => bot, typingMiddleware: () => async (_ctx, next) => next(),
+    interactionFetchImpl: async (url, options) => {
+      assert.equal(options.method, 'PUT');
+      assert.equal(options.redirect, 'error');
+      assert.equal(options.headers.Authorization, 'QQBot synthetic-access-token');
+      const path = new URL(url);
+      assert.equal(path.origin, 'https://api.sgroup.qq.com');
+      const id = decodeURIComponent(path.pathname.slice('/interactions/'.length));
+      const { code } = JSON.parse(options.body);
+      acks.push({ id, code });
+      await onAck?.(id, code);
+      return new Response(null, { status: 204 });
+    },
     logger: { info() {}, warn() {}, error() {} },
   });
   t.after(() => runtime.stop());
@@ -387,7 +400,7 @@ async function callbackRuntime(t, { group = false, policy, onAck } = {}) {
     replyTarget: { scope: group ? 'group' : 'c2c', targetId: group ? 'group-one' : 'owner', msgId: 'open-menu' } };
   await bot.listeners('message')[0]({ bot, message }, message);
   const menu = bot.sent.find((entry) => entry.keyboard);
-  const button = menu.keyboard.content.rows.flatMap((row) => row.buttons)[4];
+  const button = menu.keyboard.content.rows.flatMap((row) => row.buttons)[buttonNumber - 1];
   const event = (changes = {}) => ({ id: `callback-${++sequence}`, application_id: 'app', type: 11, version: 1,
     scene: group ? 'group' : 'c2c', chat_type: group ? 1 : 2,
     ...(group ? { group_openid: 'group-one', group_member_openid: 'owner' } : { user_openid: 'owner' }),
@@ -397,6 +410,20 @@ async function callbackRuntime(t, { group = false, policy, onAck } = {}) {
 }
 
 for (const group of [false, true]) {
+  for (const [name, buttonNumber, title] of [['models', 4, /🧠 模型/u], ['help', 13, /📖 帮助/u]]) {
+    test(`QQ runtime replies to ${group ? 'group' : 'private'} ${name} navigation after an empty 204 ACK`, async (t) => {
+      const f = await callbackRuntime(t, { group, buttonNumber });
+      const event = f.event();
+      await f.callback(event);
+      assert.deepEqual(f.acks, [{ id: event.id, code: 0 }]);
+      const reply = f.bot.sent.at(-1);
+      assert.match(reply.markdown.content, title);
+      assert.ok(reply.keyboard.content.rows.length);
+      assert.equal(reply.extra.event_id, event.id);
+      assert.equal(reply.target.msgId, undefined);
+      assert.equal(f.cleared(), 0);
+    });
+  }
   test(`QQ runtime connects native ${group ? 'group' : 'private'} callbacks to existing menu commands`, async (t) => {
     const f = await callbackRuntime(t, { group });
     assert.equal(f.bot.listenerCount('interaction'), 1);

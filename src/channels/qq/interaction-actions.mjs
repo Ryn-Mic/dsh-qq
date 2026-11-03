@@ -68,6 +68,7 @@ function awaitAcknowledgement(task, remainingMs, signal) {
 export function createQqInteractionHandler({
   bot, replyBot = bot, bridge, appId, ownerUserOpenid, accessPolicy, signal, logger = console,
   now = Date.now, acknowledgementDeadlineMs = 2_500,
+  acknowledgeInteraction = (id, code) => bot.acknowledgeInteraction(id, code),
 }) {
   const acknowledged = new Set();
   return async (ctx, event) => {
@@ -124,11 +125,11 @@ export function createQqInteractionHandler({
     try {
       // Code 0 acknowledges receipt; all Host work begins only after this
       // request succeeds. It does not claim the operation has completed.
-      await awaitAcknowledgement(bot.acknowledgeInteraction(id, code), remainingMs, signal);
+      await awaitAcknowledgement(acknowledgeInteraction(id, code, { signal, timeoutMs: remainingMs }), remainingMs, signal);
     } catch (error) {
       if (!signal?.aborted) diagnostic(reason, code, {
         acknowledged: false,
-        failure: error?.code === 'qq-interaction-ack-timeout' ? 'ack-deadline' : 'ack-request-failed',
+        failure: ['qq-interaction-ack-timeout', 'qq-operation-timeout'].includes(error?.code) ? 'ack-deadline' : 'ack-request-failed',
         ...(Number.isInteger(error?.httpStatus) ? { httpStatus: error.httpStatus } : {}),
         ...(Number.isInteger(error?.bizCode) ? { bizCode: error.bizCode } : {}),
       }, 'warn');

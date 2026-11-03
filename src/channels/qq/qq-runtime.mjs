@@ -11,6 +11,7 @@ import { createQqBridgeStatus, QqHarnessBridge } from './qq-bridge.mjs';
 import { isQqMessageAddressed, normalizeQqMentions } from './qq-mention.mjs';
 import { sendMarkdownReply } from './markdown-reply.mjs';
 import { createQqInteractionHandler } from './interaction-actions.mjs';
+import { acknowledgeQqInteraction } from './interaction-ack.mjs';
 import { QqExtendedApi } from './qq-extended-api.mjs';
 import { createEventAwareBot } from './event-aware-bot.mjs';
 
@@ -47,6 +48,7 @@ export class QqRuntime {
   #connectTimeoutMs;
   #createBot;
   #typingMiddleware;
+  #interactionFetchImpl;
   #status = createQqRuntimeStatus();
   #bot = null;
   #bridge = null;
@@ -68,6 +70,7 @@ export class QqRuntime {
     connectTimeoutMs = 20_000,
     createBot = (options) => new QQBot(options),
     typingMiddleware = typingIndicator,
+    interactionFetchImpl = fetch,
   }) {
     if (!config || !appSecret || !harness || !state) {
       throw new TypeError('QqRuntime requires config, app secret, Harness, and state');
@@ -84,6 +87,7 @@ export class QqRuntime {
     this.#connectTimeoutMs = connectTimeoutMs;
     this.#createBot = createBot;
     this.#typingMiddleware = typingMiddleware;
+    this.#interactionFetchImpl = interactionFetchImpl;
   }
 
   get status() {
@@ -322,6 +326,8 @@ export class QqRuntime {
       bot, replyBot, bridge: this.#bridge, appId: this.#config.appId,
       ownerUserOpenid: this.#config.ownerUserOpenid, accessPolicy: this.#accessPolicy,
       signal: controller.signal, logger: this.#logger,
+      acknowledgeInteraction: (interactionId, code, options) =>
+        acknowledgeQqInteraction({ bot, interactionId, code, ...options, fetchImpl: this.#interactionFetchImpl }),
     });
     const onInteraction = (ctx, event) => {
       const task = handleInteraction(ctx, event).catch((error) => {
