@@ -15,7 +15,7 @@ window.addEventListener('error', (event) => errors.push(event.message));
 window.addEventListener('unhandledrejection', (event) => errors.push(String(event.reason)));
 const app = document.getElementById('app');
 const root = createRoot(app);
-const render = (channel = 'feishu') => root.render(React.createElement('div', {
+const render = (channel = 'qq') => root.render(React.createElement('div', {
   className: 'dim-page dim-panel', style: { padding: 0, border: 0 },
 },
   React.createElement(DeliveryTargetSettingsPage, {
@@ -85,7 +85,7 @@ async function run() {
   await resize(280);
   await until(() => arrows().length === 2 && fullyVisible(), 'Arrows did not return on shrink');
   if (english) assert(arrows().every((arrow) => arrow.getAttribute('aria-label').startsWith('Scroll settings')), 'Scroll buttons were not translated');
-  render('weixin');
+  render('qq');
   await until(() => tabs().length === 2 && arrows().length === 0, 'Two-tab channel retained overflow controls');
   render();
   await until(() => tabs().length === 5 && arrows().length === 2, 'Feishu tabs did not restore');

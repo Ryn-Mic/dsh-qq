@@ -24,7 +24,7 @@ export const DSH_LOCALE_PREFERENCE_FIELD = 'preference';
  */
 export function interfaceLanguageSettingsPath(config = {}) {
   const dshHome = resolve(config.dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'));
-  return resolve(dshHome, 'integrations', 'dsh-im', 'interface-language.json');
+  return resolve(dshHome, 'integrations', 'dsh-qq', 'interface-language.json');
 }
 
 /**

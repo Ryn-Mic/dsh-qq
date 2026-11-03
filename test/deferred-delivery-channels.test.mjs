@@ -3,21 +3,9 @@ import test from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { StateStore } from '../src/channels/feishu/state-store.mjs';
-import { WecomStateStore } from '../src/channels/wecom/state-store.mjs';
-import { WeixinStateStore } from '../src/channels/weixin/state-store.mjs';
 import { QqStateStore } from '../src/channels/qq/state-store.mjs';
-import { DingtalkStateStore } from '../src/channels/dingtalk/state-store.mjs';
 import { ConversationStateStore } from '../src/channels/shared/conversation-state-store.mjs';
-import { FeishuHarnessBridge } from '../src/channels/feishu/bridge.mjs';
-import { WecomHarnessBridge } from '../src/channels/wecom/wecom-bridge.mjs';
-import { WeixinHarnessBridge } from '../src/channels/weixin/weixin-bridge.mjs';
 import { QqHarnessBridge, deferredDeliveryTarget } from '../src/channels/qq/qq-bridge.mjs';
-import { DingtalkHarnessBridge } from '../src/channels/dingtalk/dingtalk-bridge.mjs';
-import { TelegramHarnessBridge } from '../src/channels/telegram/telegram-bridge.mjs';
-import { DiscordHarnessBridge } from '../src/channels/discord/discord-bridge.mjs';
-import { SlackHarnessBridge } from '../src/channels/slack/slack-bridge.mjs';
-import { WhatsappHarnessBridge } from '../src/channels/whatsapp/whatsapp-bridge.mjs';
 
 const logger = { warn() {}, error() {}, info() {} };
 const ANSWER = 'The deferred result is 42.';
@@ -28,12 +16,7 @@ const openHistory = [
 ];
 const completeHistory = [...openHistory,
   { seq: 3, type: 'assistant/message', data: { turn: 3, step: 0, message: { content: [{ type: 'text', text: ANSWER }] } } }, end];
-const textChannels = {
-  telegram: [TelegramHarnessBridge, { chatId: '-100', chatType: 'supergroup', replyToMessageId: 123, messageThreadId: 456 }],
-  discord: [DiscordHarnessBridge, { channelId: 'discord-thread', replyToMessageId: 'source' }],
-  slack: [SlackHarnessBridge, { channelId: 'slack-channel', threadTs: '123.456', recipientUserId: 'owner', recipientTeamId: 'team' }],
-  whatsapp: [WhatsappHarnessBridge, { jid: 'owner@s.whatsapp.net', selfChat: true }],
-};
+const textChannels = {};
 
 function channelFixture(channel, record) {
   if (textChannels[channel]) {
@@ -93,7 +76,7 @@ function channelFixture(channel, record) {
   };
 }
 
-for (const channel of ['feishu', 'wecom', 'weixin', 'dingtalk', 'qq', ...Object.keys(textChannels)]) {
+for (const channel of ['qq']) {
   test(`${channel}: real message entry tracks timeout, supports scoped stop, resumes after restart and sends once to the original route`, async (t) => {
     const dir = await mkdtemp(join(tmpdir(), `dsh-deferred-${channel}-`));
     const path = join(dir, 'state.json');

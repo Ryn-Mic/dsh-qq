@@ -291,7 +291,6 @@ test('the synchronous lookup skips a bot whose state throws', () => {
 // --- end to end: normalized inbound -> bridge -> state -> lookup ------------
 
 import { TextHarnessBridge } from '../src/channels/shared/text-harness-bridge.mjs';
-import { normalizeTelegramUpdate } from '../src/channels/telegram/telegram-runtime.mjs';
 import { CONTEXT_ENHANCEMENT_FIELDS } from '../src/channels/shared/context-enhancement.mjs';
 
 const ENHANCEMENT_ON = {
@@ -301,57 +300,3 @@ const ENHANCEMENT_ON = {
     direct: { enabled: true, fields: [...CONTEXT_ENHANCEMENT_FIELDS], guidance: '' },
   }),
 };
-
-for (const enhanced of [false, true]) test(`a normalized telegram message is recorded by the bridge and named by the lookup (enhancement ${enhanced ? 'on' : 'off'})`, async () => {
-  await withStore(async (file) => {
-    const store = new ConversationStateStore(file);
-    await store.load();
-    const warnings = [];
-    const bridge = new TextHarnessBridge({
-      descriptor: { key: 'telegram', label: 'Telegram' },
-      state: store,
-      bot: { sendText: async () => undefined },
-      harness: {
-        sessionExists: async () => false,
-        createSession: async () => 'session-e2e',
-        ask: async () => 'ok',
-      },
-      ...(enhanced ? { contextEnhancement: ENHANCEMENT_ON } : {}),
-      logger: { warn: (...args) => warnings.push(args.join(' ')), error() {} },
-    });
-    const normalized = normalizeTelegramUpdate({
-      update_id: 501,
-      message: {
-        message_id: 9,
-        chat: { id: 781, type: 'private' },
-        from: { id: 781, is_bot: false, first_name: 'Marish', username: 'marish' },
-        text: 'hello',
-      },
-    }, { botId: 1, username: 'bot' });
-    await bridge.accept(normalized);
-    await bridge.waitForIdle?.();
-    for (let i = 0; i < 200 && !store.authorFor('direct:781'); i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    }
-    assert.deepEqual(warnings.filter((line) => line.includes('author')), []);
-    const author = store.authorFor('direct:781');
-    assert.equal(author?.senderId, '781');
-    // Names are personal data: kept only when context enhancement read them.
-    assert.equal(author?.senderName, enhanced ? 'Marish' : undefined);
-    assert.equal(author?.senderUsername, enhanced ? 'marish' : undefined);
-    assert.equal(author?.isBot, false);
-
-    const adapter = createDeliveryAdapter({
-      channel: 'telegram',
-      workspaces: fakeWorkspaces(['botA']),
-      coreController: {},
-      stateFor: async () => store,
-    });
-    const described = await adapter.describeConversationBySession('session-e2e');
-    assert.equal(described.conversationKey, 'direct:781');
-    assert.equal(described.senderId, '781');
-    assert.equal(described.senderName, enhanced ? 'Marish' : null);
-    assert.equal(described.senderUsername, enhanced ? 'marish' : null);
-    assert.equal(described.senderIsBot, false);
-  });
-});

@@ -13,7 +13,6 @@ import { WindowAmbientProvider } from '../../../src/channels/shared/conversation
 import { composeContextPrompt, contextBlockFor, dedupeContextEntries, renderContextEntries } from '../../../src/channels/shared/conversation/context-builder.mjs';
 import { CONTEXT_NOTE } from '../../../src/channels/shared/injected-context.mjs';
 import { ConversationStateStore } from '../../../src/channels/shared/conversation-state-store.mjs';
-import { MatrixRoomHistoryStore } from '../../../src/channels/matrix/matrix-room-history.mjs';
 
 const tempDirectories = new Set();
 
@@ -209,54 +208,6 @@ test('the event LRU evicts the least recently used entry and refreshes on read',
   deepStrictEqual(lru.size, 0);
 });
 
-test('the ambient provider follows the same-sender burst run and falls back to the recent window', async () => {
-  const directory = await makeTempDirectory('dsh-im-conversation-ambient-');
-  const store = await new MatrixRoomHistoryStore(join(directory, 'matrix-history.json')).load();
-  const room = '!ambient:example.org';
-  const now = 10_000_000;
-  const seed = [
-    { eventId: '$old:x', sender: '@carol:x', name: 'carol', text: '更早的话', ts: now - 400_000 },
-    { eventId: '$b1:x', sender: '@carol:x', name: 'carol', text: '连珠第一条', ts: now - 170_000 },
-    { eventId: '$b2:x', sender: '@carol:x', name: 'carol', text: '连珠第二条', ts: now - 110_000 },
-    { eventId: '$b3:x', sender: '@carol:x', name: 'carol', text: '隔得太久', ts: now - 10_000 },
-    { eventId: '$gap:x', sender: '@carol:x', name: 'carol', text: '断裂之后', ts: now - 200_000 },
-  ];
-  for (const entry of seed) {
-    ok(store.append({ roomId: room, kind: 'human', ...entry }), `seed ${entry.eventId}`);
-  }
-  ok(store.append({ roomId: room, kind: 'human', eventId: '$done:x', sender: '@carol:x', name: 'carol', text: '已被注入过', ts: now - 90_000, injected: true }));
-  ok(store.append({ roomId: room, kind: 'bot', eventId: '$bot:x', sender: '@bot:x', name: 'bot', text: '机器人回声', ts: now - 80_000 }));
-  const provider = new WindowAmbientProvider({
-    store,
-    burstGapMs: 90_000,
-    recentWindowMs: 200_000,
-    recentCount: 10,
-    maxContextChars: 4_000,
-  });
-  const first = provider.query({ roomId: room, senderId: '@carol:x', now });
-  deepStrictEqual(first.burst.map((entry) => entry.eventId), ['$b3:x'],
-    'the gap breaks the trailing run so only the freshest same-sender message bursts');
-  deepStrictEqual(first.recent.map((entry) => entry.eventId), ['$gap:x', '$b1:x', '$b2:x'],
-    'the rest of the window arrives as bounded recent context, oldest first');
-  const limited = new WindowAmbientProvider({
-    store,
-    burstGapMs: 90_000,
-    recentWindowMs: 200_000,
-    recentCount: 2,
-    maxContextChars: 4_000,
-  });
-  deepStrictEqual(limited.query({ roomId: room, senderId: '@dave:x', now }).recent
-    .map((entry) => entry.eventId), ['$b2:x', '$b3:x'], 'the recent list keeps the freshest entries within its count bound');
-  equal(await provider.markConsumed({ roomId: room, entries: [...first.burst, ...first.recent] }), 4);
-  const second = provider.query({ roomId: room, senderId: '@carol:x', now });
-  deepStrictEqual(second.burst, [], 'consumed entries are never offered again');
-  deepStrictEqual(second.recent, []);
-  deepStrictEqual(provider.query({ roomId: room, senderId: '@dave:x', now }), { burst: [], recent: [] },
-    'a different sender cannot claim carol\'s burst');
-  deepStrictEqual(store.pending({ roomId: room, limit: 10 }).map((entry) => entry.eventId), ['$old:x'],
-    'only the entry older than the window was never offered, so it stays pending');
-  await store.flush();
-});
 
 test('the context builder emits split-ready injected context blocks merged by event', () => {
   deepStrictEqual(renderContextEntries([]), '', 'nothing collected renders nothing');

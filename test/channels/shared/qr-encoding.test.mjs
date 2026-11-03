@@ -4,23 +4,14 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PNG } from 'pngjs';
-import { createWeixinRpcHandler } from '../../../plugin-src/host/channels/weixin/rpc.mjs';
-import { createFeishuRpcHandler } from '../../../plugin-src/host/channels/feishu/rpc.mjs';
-import { createDingtalkRpcHandler } from '../../../plugin-src/host/channels/dingtalk/rpc.mjs';
-import { createWecomRpcHandler } from '../../../plugin-src/host/channels/wecom/rpc.mjs';
 import { createQqRpcHandler } from '../../../plugin-src/host/channels/qq/rpc.mjs';
-import { createWhatsappRpcHandler } from '../../../plugin-src/host/channels/whatsapp/rpc.mjs';
 import { createConnectionDiagnostics } from '../../../src/channels/shared/connection-error.mjs';
 import { normalizeDiagnosticDetails, safeDiagnosticMessage } from '../../../src/channels/shared/diagnostic-details.mjs';
 import { qrEncodingError } from '../../../src/channels/shared/qr-encoding-error.mjs';
 import { setImHostLanguage } from '../../../src/channels/shared/i18n.mjs';
 import { ConnectionError, formatConnectionDiagnostic, normalizeConnectionError } from '../../../plugin-src/client/connection-error.js';
 
-const factories = {
-  weixin: createWeixinRpcHandler, feishu: createFeishuRpcHandler,
-  dingtalk: createDingtalkRpcHandler, wecom: createWecomRpcHandler,
-  qq: createQqRpcHandler, whatsapp: createWhatsappRpcHandler,
-};
+const factories = { qq: createQqRpcHandler };
 const fakePng = 'data:image/png;base64,YWJjZA==';
 const privateText = 'private-token https://user:password@private.example/?secret=secret';
 const require = createRequire(import.meta.url);

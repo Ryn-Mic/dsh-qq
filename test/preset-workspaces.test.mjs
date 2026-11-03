@@ -13,7 +13,6 @@ import { ConversationStateStore } from '../src/channels/shared/conversation-stat
 import { askInWorkspaceSession } from '../src/channels/shared/workspace-session.mjs';
 import { runWorkspaceCommand, workspacePathSnapshot } from '../src/channels/shared/workspace-command.mjs';
 import { qqMenuView } from '../src/channels/qq/qq-menu.mjs';
-import { dingtalkMenuSnapshot } from '../src/channels/dingtalk/dingtalk-menu.mjs';
 
 const catalog = {
   defaultId: 'standard',
@@ -292,17 +291,6 @@ test('after /new the list follows the next preset without creating a session', a
   assert.equal(f.state.sessionFor('grouped'), null);
 });
 
-test('QQ and DingTalk menu session choices resolve the group after restart', async (t) => {
-  const f = await conversationFixture(t);
-  const scope = await f.reload();
-  const qq = await qqMenuView('sessions', scope.harness, scope.state, 'grouped');
-  assert.ok(JSON.stringify(qq).includes(`/session ${f.grouped.sessionId}`));
-  assert.ok(!JSON.stringify(qq).includes(`/session ${f.old.sessionId}`));
-  const dingtalk = await dingtalkMenuSnapshot(scope.harness, scope.state, 'grouped');
-  assert.equal(dingtalk.sessionWorkspace, join(f.base, 'presets', 'research'));
-  assert.ok(dingtalk.selections.session.some(([, command]) => command === `/session ${f.grouped.sessionId}`));
-  assert.ok(!dingtalk.selections.session.some(([, command]) => command === `/session ${f.old.sessionId}`));
-});
 
 test('a workspace switch during registry lookup cannot publish a stale group', async (t) => {
   const f = await conversationFixture(t);

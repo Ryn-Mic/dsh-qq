@@ -25,15 +25,7 @@ import {
   SET_MODEL_ENDPOINT,
   validModelPayload,
 } from '../plugin-src/host/channels/shared/model-setting-rpc.mjs';
-import { createWeixinRpcHandler, WEIXIN_ENDPOINTS } from '../plugin-src/host/channels/weixin/rpc.mjs';
-import { createFeishuRpcHandler, FEISHU_ENDPOINTS } from '../plugin-src/host/channels/feishu/rpc.mjs';
-import { createDingtalkRpcHandler, DINGTALK_ENDPOINTS } from '../plugin-src/host/channels/dingtalk/rpc.mjs';
-import { createWecomRpcHandler, WECOM_ENDPOINTS } from '../plugin-src/host/channels/wecom/rpc.mjs';
 import { createQqRpcHandler, QQ_ENDPOINTS } from '../plugin-src/host/channels/qq/rpc.mjs';
-import { createSlackRpcHandler, SLACK_ENDPOINTS } from '../plugin-src/host/channels/slack/rpc.mjs';
-import { createTelegramRpcHandler, TELEGRAM_ENDPOINTS } from '../plugin-src/host/channels/telegram/rpc.mjs';
-import { createDiscordRpcHandler, DISCORD_ENDPOINTS } from '../plugin-src/host/channels/discord/rpc.mjs';
-import { createWhatsappRpcHandler, WHATSAPP_ENDPOINTS } from '../plugin-src/host/channels/whatsapp/rpc.mjs';
 
 const MODEL = Object.freeze({ provider: 'openai', model: 'gpt-5' });
 const REASONING_MODEL = Object.freeze({ ...MODEL, reasoningEffort: 'custom-max' });
@@ -154,62 +146,6 @@ test('strict catalog reads preserve failures and cancellation without changing s
     error => error === aborted);
 });
 
-test('model saves report catalog failures through WeCom RPC, keep disk state, and recover on retry', async (t) => {
-  const { path, workspace } = await fixture(t);
-  const workspaces = await new BotWorkspaceStore(path, { defaultWorkspace: workspace }).load();
-  await workspaces.ensure('bot_one');
-  let failure;
-  let catalog = CATALOG;
-  const success = (rpcId, value) => ({ rpcId, result: { ok: true, value } });
-  const harness = new HarnessClient({ workspace, apiProxy: {
-    host: { describe: ({ rpcId }) => success(rpcId, {}) },
-    llm: { models: ({ rpcId }) => {
-      if (failure) throw failure;
-      return success(rpcId, structuredClone(catalog));
-    } },
-  } });
-  const { controller: base } = controllerFixture();
-  base.diagnostics = createConnectionDiagnostics({ channel: 'wecom', logger: { error() {} } });
-  const controller = createWorkspaceAwareController(base, {
-    workspaces, stateFor: async () => ({}), modelCatalog: options => listModelCatalog(harness, options),
-  });
-  const handler = createWecomRpcHandler(controller);
-  assert.deepEqual((await controller.status()).modelCatalog, CATALOG);
-  const before = await readFile(path, 'utf8');
-  failure = Object.assign(new Error('private provider error: token=do-not-expose'), { code: 'ECONNRESET' });
-  const failed = await handler(WECOM_ENDPOINTS.setModel, { botId: 'bot_one', model: MODEL });
-  assert.equal(failed.ok, false);
-  assert.equal(failed.error.code, 'model-catalog-unavailable');
-  assert.match(failed.error.message, /模型设置未保存/u);
-  assert.equal(failed.error.details.reason, 'ECONNRESET');
-  assert.equal(failed.error.details.method, 'llm.models');
-  assert.equal(failed.error.details.stage, 'status.read');
-  assert.equal(failed.error.details.transport, 'host-api');
-  assert.equal(JSON.stringify(failed).includes('do-not-expose'), false);
-  assert.equal(await readFile(path, 'utf8'), before);
-  assert.equal(workspaces.modelFor('bot_one'), null);
-  // A background status read still works while the provider is unavailable.
-  assert.deepEqual((await controller.status()).modelCatalog, EMPTY_MODEL_CATALOG);
-
-  failure = null;
-  catalog = { groups: [], failures: [{ id: MODEL.provider, name: 'OpenAI' }] };
-  await assert.rejects(controller.updateModel('bot_one', MODEL), { code: 'model-catalog-unavailable' });
-  assert.equal(await readFile(path, 'utf8'), before);
-
-  catalog = { ...CATALOG, failures: [{ id: 'other-provider', name: 'Other' }] };
-  const retried = await handler(WECOM_ENDPOINTS.setModel, { botId: 'bot_one', model: MODEL });
-  assert.equal(retried.ok, true);
-  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')).models.bot_one, MODEL);
-
-  const saved = await readFile(path, 'utf8');
-  catalog = { groups: [], failures: [] };
-  await assert.rejects(controller.updateModel('bot_one', MODEL), { code: 'model-selection-unavailable' });
-  assert.equal(await readFile(path, 'utf8'), saved);
-  failure = Object.assign(new Error('offline again'), { code: 'ECONNRESET' });
-  await assert.rejects(controller.updateModel('bot_one', { provider: 'other', model: 'new' }),
-    { code: 'model-catalog-unavailable' });
-  assert.equal(await readFile(path, 'utf8'), saved);
-});
 
 test('workspace-aware model setting refreshes the catalog and rejects unavailable choices', async (t) => {
   const { path, workspace } = await fixture(t);
@@ -348,44 +284,6 @@ function controllerFixture() {
   return { controller, calls };
 }
 
-test('all nine Host RPCs expose and execute the unified model-setting contract', async () => {
-  const factories = [
-    ['weixin', createWeixinRpcHandler, WEIXIN_ENDPOINTS],
-    ['feishu', createFeishuRpcHandler, FEISHU_ENDPOINTS],
-    ['dingtalk', createDingtalkRpcHandler, DINGTALK_ENDPOINTS],
-    ['wecom', createWecomRpcHandler, WECOM_ENDPOINTS],
-    ['qq', createQqRpcHandler, QQ_ENDPOINTS],
-    ['slack', createSlackRpcHandler, SLACK_ENDPOINTS],
-    ['telegram', createTelegramRpcHandler, TELEGRAM_ENDPOINTS],
-    ['discord', createDiscordRpcHandler, DISCORD_ENDPOINTS],
-    ['whatsapp', createWhatsappRpcHandler, WHATSAPP_ENDPOINTS],
-  ];
-  for (const [channel, createHandler, endpoints] of factories) {
-    const { controller, calls } = controllerFixture();
-    const handler = createHandler(controller);
-    assert.equal(endpoints.setModel, SET_MODEL_ENDPOINT, channel);
-    const result = await handler(endpoints.setModel, { botId: 'bot_one', model: REASONING_MODEL });
-    assert.equal(result.ok, true, `${channel}: ${JSON.stringify(result)}`);
-    assert.deepEqual(calls, [{ botId: 'bot_one', model: REASONING_MODEL }], channel);
-    assert.deepEqual(result.value?.bots?.[0]?.model, REASONING_MODEL, `${channel} model projection`);
-    assert.deepEqual(result.value?.modelCatalog, CATALOG, `${channel} catalog projection`);
-    const invalid = await handler(endpoints.setModel, {
-      botId: 'bot_one', model: { ...MODEL, extra: true },
-    });
-    assert.equal(invalid.ok, false, channel);
-    assert.equal(invalid.error.code, 'bad-request', channel);
-    assert.equal(calls.length, 1, channel);
-    controller.updateModel = async () => {
-      const error = new Error('当前模型不支持所选思考强度，请重新选择。');
-      error.code = 'model-reasoning-unavailable';
-      throw error;
-    };
-    const unavailable = await handler(endpoints.setModel, { botId: 'bot_one', model: REASONING_MODEL });
-    assert.equal(unavailable.ok, false, channel);
-    assert.equal(unavailable.error.code, 'model-reasoning-unavailable', channel);
-    assert.equal(unavailable.error.message, '当前模型不支持所选思考强度，请重新选择。', channel);
-  }
-});
 
 test('reasoning catalog exposes sanitized public metadata and preserves opaque effort IDs', () => {
   const normalized = normalizeModelCatalog({ groups: [{ id: 'provider', models: [{

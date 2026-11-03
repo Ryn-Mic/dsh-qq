@@ -104,7 +104,7 @@ test('parseInboundDirectoryName parses timestamp names and rejects everything el
 
 test('InboundTtlStore starts at the default TTL, round-trips values, and survives damage', async (t) => {
   const root = await directory(t, 'dsh-im-ttl-store-');
-  const settingsPath = join(root, 'integrations', 'dsh-im', 'settings.json');
+  const settingsPath = join(root, 'integrations', 'dsh-qq', 'settings.json');
 
   const fresh = await new InboundTtlStore(settingsPath).load();
   assert.equal(fresh.getTtlHours(), DEFAULT_INBOUND_TTL_HOURS);

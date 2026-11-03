@@ -16,49 +16,10 @@ import {
 import { CredentialBindingPanel } from '../plugin-src/client/credential-binding.js';
 import { ChannelListHeading } from '../plugin-src/client/channel-card-meta.js';
 import { installImStyles } from '../plugin-src/client/styles.js';
-import { FEISHU_ENDPOINTS } from '../plugin-src/client/channels/feishu/api.js';
-import { DINGTALK_ENDPOINTS } from '../plugin-src/client/channels/dingtalk/api.js';
-import {
-  AccountCard as DingtalkAccountCard,
-  DingtalkSettingsTab,
-} from '../plugin-src/client/channels/dingtalk/index.js';
-import {
-  BotCard as FeishuBotCard,
-  FeishuSettingsTab,
-} from '../plugin-src/client/channels/feishu/index.js';
-import {
-  AccountCard as WeixinAccountCard,
-  WeixinSettingsTab,
-} from '../plugin-src/client/channels/weixin/index.js';
-import {
-  AccountCard as WecomAccountCard,
-  WecomSettingsTab,
-} from '../plugin-src/client/channels/wecom/index.js';
-import { WecomAppSettingsTab } from '../plugin-src/client/channels/wecom-app/index.js';
 import {
   AccountCard as QqAccountCard,
   QqSettingsTab,
 } from '../plugin-src/client/channels/qq/index.js';
-import {
-  SlackAccountCard,
-  SlackSettingsTab,
-} from '../plugin-src/client/channels/slack/index.js';
-import {
-  TelegramAccountCard,
-  TelegramSettingsTab,
-} from '../plugin-src/client/channels/telegram/index.js';
-import {
-  DiscordAccountCard,
-  DiscordSettingsTab,
-} from '../plugin-src/client/channels/discord/index.js';
-import {
-  WhatsappAccountCard,
-  WhatsappSettingsTab,
-} from '../plugin-src/client/channels/whatsapp/index.js';
-import {
-  IMessageAccountCard,
-  IMessageSettingsTab,
-} from '../plugin-src/client/channels/imessage/index.js';
 import {
   en,
   IM_LOCALE_NAMESPACE,
@@ -77,37 +38,37 @@ import {
 
 const STYLES_URL = new URL('../plugin-src/client/styles.js', import.meta.url);
 const FEISHU_STYLES_URL = new URL(
-  '../plugin-src/client/channels/feishu/styles.js',
+  '../plugin-src/client/channels/qq/styles.js',
   import.meta.url,
 );
 const WEIXIN_STYLES_URL = new URL(
-  '../plugin-src/client/channels/weixin/styles.js',
+  '../plugin-src/client/channels/qq/styles.js',
   import.meta.url,
 );
 const DINGTALK_STYLES_URL = new URL(
-  '../plugin-src/client/channels/dingtalk/styles.js',
+  '../plugin-src/client/channels/shared/connection-styles.js',
   import.meta.url,
 );
 const WECOM_STYLES_URL = new URL(
-  '../plugin-src/client/channels/wecom/styles.js',
+  '../plugin-src/client/channels/qq/styles.js',
   import.meta.url,
 );
 const FEISHU_SOURCE_URL = new URL(
-  '../plugin-src/client/channels/feishu/index.js',
+  '../plugin-src/client/channels/qq/index.js',
   import.meta.url,
 );
 const WEIXIN_SOURCE_URL = new URL(
-  '../plugin-src/client/channels/weixin/index.js',
+  '../plugin-src/client/channels/qq/index.js',
   import.meta.url,
 );
 const CLIENT_BUNDLE_URL = new URL('../lib/client.js', import.meta.url);
 const CLIENT_SOURCE_DIRECTORY_URL = new URL('../plugin-src/client/', import.meta.url);
 const DINGTALK_CLIENT_SOURCE_URL = new URL(
-  '../plugin-src/client/channels/dingtalk/index.js',
+  '../plugin-src/client/channels/qq/index.js',
   import.meta.url,
 );
 const WECOM_SOURCE_URL = new URL(
-  '../plugin-src/client/channels/wecom/index.js',
+  '../plugin-src/client/channels/qq/index.js',
   import.meta.url,
 );
 const QQ_SOURCE_URL = new URL(
@@ -191,7 +152,7 @@ test('removing the first account preserves collapse styles and toggling for rema
   }
 });
 
-test('IM settings renders twelve IM channels plus the AI Office connector', async () => {
+test('IM settings renders only QQ plus shared general settings', async () => {
   const { default: packageMetadata } = await import('../package.json', {
     with: { type: 'json' },
   });
@@ -218,17 +179,15 @@ test('IM settings renders twelve IM channels plus the AI Office connector', asyn
   assert.match(markup, /class="dim-brand"/);
   assert.equal(IM_PLUGIN_VERSION, packageVersion);
   assert.match(markup, new RegExp(
-    `<div class="dim-brandHeading"><strong class="dim-brandName">DSH-IM<\\/strong><span class="dim-brandVersion">v${packageVersion.replaceAll('.', '\\.')}<\\/span><\\/div>`,
+    `<div class="dim-brandHeading"><strong class="dim-brandName">DSH-QQ<\\/strong><span class="dim-brandVersion">v${packageVersion.replaceAll('.', '\\.')}<\\/span><\\/div>`,
   ));
   assert.doesNotMatch(markup, /dim-versionTooltip|当前版本/);
   assert.doesNotMatch(markup, /dim-brandLogo|<img/);
-  assert.match(markup, /href="https:\/\/github\.com\/xmanrui\/dsh-im"/);
+  assert.match(markup, /href="https:\/\/github\.com\/Ryn-Mic\/dsh-qq"/);
   assert.match(markup, /target="_blank"/);
   assert.match(markup, /rel="noopener noreferrer"/);
-  assert.match(markup, /aria-label="dsh-im GitHub"/);
-  assert.match(markup, /dim-updateTrigger[^>]*aria-label="检查更新"[^>]*aria-haspopup="dialog"[^>]*><svg/);
-  assert.match(markup, /class="dim-updateTooltip" role="tooltip">检查更新<\/span>/);
-  assert.ok(markup.indexOf('dim-updateTrigger') < markup.indexOf('dim-githubAction'));
+  assert.match(markup, /aria-label="dsh-qq GitHub"/);
+  assert.doesNotMatch(markup, /dim-updateTrigger|检查更新/);
   assert.ok(markup.indexOf('dim-githubAction') < markup.indexOf('dim-generalSettingsAction'));
   assert.match(markup, /aria-describedby="[^"]+"/);
   assert.match(markup, /role="tooltip"[^>]*>帮助与反馈 · 前往 GitHub</);
@@ -263,36 +222,18 @@ test('IM settings renders twelve IM channels plus the AI Office connector', asyn
   assert.match(styles, /\.dim-globalSweepAction \{[^}]*position: relative;[^}]*margin-left: auto;/);
   assert.match(styles, /\.dim-globalSweepConfirm \{[^}]*position: absolute;[^}]*top: calc\(100% \+ 8px\);[^}]*right: 0;/);
   assert.doesNotMatch(markup, /\d+ 个渠道|dim-channelCount/);
-  assert.match(markup, />微信</);
-  assert.match(markup, />飞书</);
-  assert.match(markup, />钉钉</);
-  assert.match(markup, />企业微信</);
-  assert.match(markup, />企业微信应用</);
   assert.match(markup, />QQ</);
-  assert.match(markup, />Slack</);
-  assert.match(markup, />Telegram</);
-  assert.match(markup, />Discord</);
-  assert.match(markup, />WhatsApp</);
-  assert.match(markup, />iMessage</);
-  assert.match(markup, />Matrix</);
-  assert.match(markup, />AI Office<\/strong><small class="dim-channelNote">（实验功能）<\/small>/);
-  assert.match(markup, /dim-logoWeixin/);
-  assert.match(markup, /dim-logoFeishu/);
-  assert.match(markup, /dim-logoDingtalk/);
-  assert.match(markup, /dim-logoWecom/);
   assert.match(markup, /dim-logoQq/);
-  assert.match(markup, /dim-logoSlack/);
-  assert.match(markup, /dim-logoTelegram/);
-  assert.match(markup, /dim-logoDiscord/);
-  assert.match(markup, /dim-logoWhatsapp/);
-  assert.match(markup, /dim-logoIMessage/);
-  assert.match(markup, /dim-logoMatrix/);
-  assert.match(markup, /dim-logoOffice/);
+  assert.doesNotMatch(markup, /dim-logoSlack/);
+  assert.doesNotMatch(markup, /dim-logoTelegram/);
+  assert.doesNotMatch(markup, /dim-logoDiscord/);
+  assert.doesNotMatch(markup, /dim-logoWhatsapp/);
+  assert.doesNotMatch(markup, /dim-logoIMessage/);
+  assert.doesNotMatch(markup, /dim-logoMatrix/);
+  assert.doesNotMatch(markup, /dim-logoOffice/);
   assert.match(styles, /\.dim-logoFeishu svg \{ width: 28px; height: 28px; \}/);
-  // This render's `emailRpcCall` never reports the channel as
-  // enabled, so the mailbox entry point is omitted: twelve IM channels plus the
-  // AI Office connector. The email tab is covered separately below.
-  assert.equal((markup.match(/role="tab"/g) ?? []).length, 13);
+  // The fork exposes exactly one QQ channel tab.
+  assert.equal((markup.match(/role="tab"/g) ?? []).length, 1);
   assert.equal((markup.match(/aria-selected="true"/g) ?? []).length, 1);
   assert.doesNotMatch(markup, /role="switch"|type="checkbox"/);
   assert.doesNotMatch(markup, /dim-chevron|扫码绑定<\/small>|扫码接入<\/small>/);
@@ -543,211 +484,12 @@ test('shared QR cards stay square and stack within the narrow combined-channel p
   assert.match(styles, /\.dim-panel \.ddt-qrCopy \{ width: 100%; min-width: 0; overflow-wrap: anywhere; \}/);
 });
 
-test('Feishu bot cards place the application identifier under the bot name', async () => {
-  const styles = await readFile(FEISHU_STYLES_URL, 'utf8');
-  const markup = renderToStaticMarkup(React.createElement(FeishuBotCard, {
-    connection: {
-      botId: 'bot-feishu-card',
-      state: 'connected',
-      connected: true,
-      bot: {
-        name: '今天是牢梁',
-        appIdMasked: 'cli_aaf4••••1234',
-        domain: 'feishu',
-        avatarUrl: 'https://example.com/custom-bot-avatar.png',
-      },
-      health: {
-        summary: '长连接运行正常',
-        lastCheckedAt: '2026-08-15T07:30:49.000Z',
-      },
-    },
-    onReconnect() {},
-    onRequestRemove() {},
-    onConfirmRemove() {},
-    onCancelRemove() {},
-  }));
 
-  assert.match(markup, /<div class="dim-aliasName"><h3[^>]*>今天是牢梁<\/h3>[^]*?<\/div><p[^>]*>cli_aaf4••••1234<\/p>/);
-  assert.match(markup, /data-im-channel-logo="feishu"/);
-  assert.match(markup, /class="bxf-card bxf-botCard dim-botCard"/);
-  assert.match(markup, /class="bxf-healthPill dim-botHealth"/);
-  assert.match(markup, /<button[^>]*aria-label="检查连接今天是牢梁"[^>]*><span>检查连接<\/span><\/button>/);
-  assert.match(markup, /class="bxf-repairAction"[^]*role="tooltip"/);
-  assert.match(markup, /card\.action\.trigger[^]*im:message:readonly[^]*im:resource/);
-  assert.match(markup, /class="bxf-connectedFooter dim-cardFooter"/);
-  assert.doesNotMatch(markup, /dim-cardSummary|长连接运行正常/);
-  assert.equal((markup.match(/dim-cardAction(?: |")/g) ?? []).length, 3);
-  assert.doesNotMatch(markup, /连接状态：|bxf-divider/);
-  assert.doesNotMatch(markup, /custom-bot-avatar/);
-  assert.match(markup, /class="dim-botHealthGroup"[^]*class="dim-lastChecked"><span>最近检查<\/span>/);
-  assert.doesNotMatch(markup, /消息通道|dim-botMetric/);
-  assert.match(markup, /class="dim-presetSelect"/);
-  assert.doesNotMatch(markup, />应用标识<|>飞书机器人</);
-  assert.doesNotMatch(styles, /\.bxf-statusGrid|\.bxf-metric/);
-  assert.match(styles, /\.bxf-repairAction:hover \.bxf-repairTooltip,[^]*\.bxf-repairAction:focus-within \.bxf-repairTooltip \{[^}]*visibility: visible;/);
-});
 
-test('Feishu keeps its heading controls on one row without a plus icon', async () => {
-  const styles = await readFile(FEISHU_STYLES_URL, 'utf8');
-  const markup = renderToStaticMarkup(React.createElement(FeishuSettingsTab, {
-    rpcCall: async () => ({ ok: true, value: {} }),
-  }));
 
-  assert.match(markup, /aria-label="扫码接入飞书机器人"/);
-  assert.match(markup, /class="dim-actionIcon"[^]*<span>扫码接入机器人<\/span>/);
-  assert.doesNotMatch(markup, />添加机器人</);
-  assert.match(styles, /\.bxf-headingTools \{[^}]*justify-content: space-between;[^}]*flex-wrap: nowrap;/);
-  assert.match(styles, /@container \(max-width: 620px\)[^]*\.bxf-headingTools \{ gap: 6px; \}/);
-  assert.doesNotMatch(styles, /\.bxf-headingTools \.bxf-button \{ margin-left: auto; \}/);
-});
-
-test('Feishu bot settings render one step-push select with four presentations', async (t) => {
-  const previousWindow = globalThis.window;
-  let nextTimer = 0;
-  const frames = new Map();
-  globalThis.window = {
-    setInterval() { return ++nextTimer; },
-    clearInterval() {},
-    setTimeout() { return ++nextTimer; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) {
-      const id = ++nextTimer;
-      frames.set(id, callback);
-      queueMicrotask(() => {
-        const pending = frames.get(id);
-        if (!pending) return;
-        frames.delete(id);
-        pending();
-      });
-      return id;
-    },
-    cancelAnimationFrame(id) { frames.delete(id); },
-  };
-  t.after(() => {
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-
-  let stepPush = false;
-  let stepPushMode = 'post';
-  const calls = [];
-  const snapshot = () => ({
-    schemaVersion: 2,
-    revision: calls.length + 1,
-    state: 'connected',
-    bots: [{
-      botId: 'bot_step_push',
-      state: 'connected',
-      connected: true,
-      groupResponseMode: 'mention',
-      mentionTopicReply: false,
-      stepPush,
-      stepPushMode,
-      bot: { name: '分步直推机器人', appIdMasked: 'cli_step••••push' },
-      health: { status: 'healthy', summary: '长连接运行正常' },
-    }],
-  });
-  const rpcCall = async (endpoint, payload) => {
-    calls.push({ endpoint, payload });
-    if (endpoint === FEISHU_ENDPOINTS.status) return { ok: true, value: snapshot() };
-    if (endpoint === FEISHU_ENDPOINTS.setStepPush) {
-      stepPush = payload.stepPush;
-      return { ok: true, value: snapshot() };
-    }
-    if (endpoint === FEISHU_ENDPOINTS.setStepPushMode) {
-      stepPushMode = payload.stepPushMode;
-      return { ok: true, value: snapshot() };
-    }
-    throw new Error(`Unexpected endpoint: ${endpoint}`);
-  };
-
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(FeishuSettingsTab, { rpcCall }));
-    await flushTasks();
-  });
-
-  // Rendering: one select with the three presentations, defaulting to off.
-  const stepPushSelect = () => renderer.root.findByProps({ 'aria-label': '任务过程展示' });
-  assert.equal(stepPushSelect().type, 'select');
-  assert.equal(stepPushSelect().props.value, 'off');
-  assert.ok(renderer.root.findAllByType('h3')
-    .some((heading) => nodeText(heading) === '任务过程展示'));
-  assert.deepEqual(
-    stepPushSelect().findAllByType('option').map((option) => option.props.value),
-    ['off', 'live_cot', 'streaming_card', 'post'],
-  );
-  const helpNodes = renderer.root.findAll(
-    (node) => node.props?.className === 'dim-feishuGroupHelp',
-  );
-  assert.equal(helpNodes.filter((node) => /只回复最终结果/.test(nodeText(node))).length, 1);
-
-  // off -> streaming_card: the flag write must land before the mode write so
-  // the runtime never sees a mode without step push enabled.
-  await act(async () => {
-    stepPushSelect().props.onChange({ target: { value: 'streaming_card' } });
-    await flushTasks();
-  });
-  const flagIndex = calls.findIndex(({ endpoint, payload }) => (
-    endpoint === FEISHU_ENDPOINTS.setStepPush
-      && payload.botId === 'bot_step_push'
-      && payload.stepPush === true
-  ));
-  const modeIndex = calls.findIndex(({ endpoint, payload }) => (
-    endpoint === FEISHU_ENDPOINTS.setStepPushMode
-      && payload.botId === 'bot_step_push'
-      && payload.stepPushMode === 'streaming_card'
-  ));
-  assert.ok(flagIndex >= 0, 'the enable flag is saved');
-  assert.ok(modeIndex >= 0, 'the presentation mode is saved');
-  assert.ok(flagIndex < modeIndex, 'the flag must be saved before the mode');
-  assert.equal(stepPushSelect().props.value, 'streaming_card');
-
-  // streaming_card -> live_cot: only the mode endpoint is called.
-  const afterEnable = calls.length;
-  await act(async () => {
-    stepPushSelect().props.onChange({ target: { value: 'live_cot' } });
-    await flushTasks();
-  });
-  const liveCalls = calls.slice(afterEnable);
-  assert.equal(liveCalls.filter(({ endpoint, payload }) => (
-    endpoint === FEISHU_ENDPOINTS.setStepPushMode && payload.stepPushMode === 'live_cot'
-  )).length, 1);
-  assert.equal(liveCalls.filter(({ endpoint }) => endpoint === FEISHU_ENDPOINTS.setStepPush).length, 0);
-  assert.equal(stepPushSelect().props.value, 'live_cot');
-
-  // live_cot -> post: only the mode endpoint is called.
-  const afterLive = calls.length;
-  await act(async () => {
-    stepPushSelect().props.onChange({ target: { value: 'post' } });
-    await flushTasks();
-  });
-  const postCalls = calls.slice(afterLive);
-  assert.equal(postCalls.filter(({ endpoint }) => endpoint === FEISHU_ENDPOINTS.setStepPushMode).length, 1);
-  assert.equal(postCalls.filter(({ endpoint }) => endpoint === FEISHU_ENDPOINTS.setStepPush).length, 0);
-  assert.equal(stepPushSelect().props.value, 'post');
-
-  // post -> off: only the flag endpoint is called, with false.
-  const afterPost = calls.length;
-  await act(async () => {
-    stepPushSelect().props.onChange({ target: { value: 'off' } });
-    await flushTasks();
-  });
-  const offCalls = calls.slice(afterPost);
-  assert.equal(offCalls.filter(({ endpoint, payload }) => (
-    endpoint === FEISHU_ENDPOINTS.setStepPush && payload.stepPush === false
-  )).length, 1);
-  assert.equal(offCalls.filter(({ endpoint }) => endpoint === FEISHU_ENDPOINTS.setStepPushMode).length, 0);
-  assert.equal(stepPushSelect().props.value, 'off');
-  await act(async () => renderer.unmount());
-});
-
-test('credential binding is a distinct secondary action beside QR binding in four channels', async () => {
+test('credential binding is a distinct secondary action beside QR binding in QQ', async () => {
   const settings = [
-    ['飞书', FeishuSettingsTab],
     ['QQ', QqSettingsTab],
-    ['钉钉', DingtalkSettingsTab],
-    ['企业微信', WecomSettingsTab],
   ];
   for (const [channel, Component] of settings) {
     const markup = renderToStaticMarkup(React.createElement(Component, {
@@ -770,72 +512,6 @@ test('credential binding is a distinct secondary action beside QR binding in fou
   assert.doesNotMatch(styles, /\.dim-panel \.dim-credentialPanel \{[^}]*border-left:/);
 });
 
-test('Feishu manual binding selects Lark, clears credentials on platform changes and locks in-flight requests', async (t) => {
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval: () => 1, clearInterval() {},
-    setTimeout: () => 1, clearTimeout() {},
-    requestAnimationFrame(callback) { queueMicrotask(callback); return 1; },
-    cancelAnimationFrame() {},
-  };
-  let renderer;
-  t.after(async () => {
-    if (renderer) await act(async () => renderer.unmount());
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-  const snapshot = { schemaVersion: 2, revision: 1, state: 'idle', bots: [] };
-  const bindings = [];
-  let finishBinding;
-  const rpcCall = async (endpoint, payload) => {
-    if (endpoint === FEISHU_ENDPOINTS.status) return { ok: true, value: snapshot };
-    assert.equal(endpoint, FEISHU_ENDPOINTS.bindCredentials);
-    bindings.push(payload);
-    if (payload.domain === 'feishu') throw new Error('Test binding rejected');
-    return new Promise((resolve) => { finishBinding = resolve; });
-  };
-  await act(async () => {
-    renderer = create(React.createElement(FeishuSettingsTab, { rpcCall }));
-    await flushTasks();
-  });
-  await act(async () => findButton(renderer, '手动接入').props.onClick());
-  const platform = () => renderer.root.findByProps({ 'aria-label': '应用平台' });
-  const inputs = () => renderer.root.findAllByType('input');
-  const fill = async () => act(async () => {
-    inputs()[0].props.onChange({ target: { value: ' cli_test ' } });
-    inputs()[1].props.onChange({ target: { value: ' test-secret ' } });
-  });
-  const submit = async () => act(async () => {
-    renderer.root.findByType('form').props.onSubmit({ preventDefault() {} });
-    await flushTasks();
-  });
-  assert.equal(platform().props.value, 'feishu');
-  assert.deepEqual(platform().findAllByType('option').map((node) => node.props.value), ['feishu', 'lark']);
-  await fill();
-  await submit();
-  assert.deepEqual(bindings[0], { appId: 'cli_test', appSecret: 'test-secret', domain: 'feishu' });
-  assert.equal(renderer.root.findAllByProps({ role: 'alert' }).length, 1);
-  await act(async () => platform().props.onChange({ target: { value: 'lark' } }));
-  assert.equal(renderer.root.findAllByProps({ role: 'alert' }).length, 0);
-  assert.ok(inputs().every((node) => node.props.value === ''), 'never reuse secrets across platforms');
-  assert.match(inputs()[0].props.placeholder, /Lark/);
-  assert.equal(inputs()[1].props.type, 'password');
-  await fill();
-  await submit();
-  assert.deepEqual(bindings[1], { appId: 'cli_test', appSecret: 'test-secret', domain: 'lark' });
-  assert.equal(platform().props.disabled, true);
-  assert.ok(inputs().every((node) => node.props.disabled));
-  assert.equal(findButton(renderer, '取消').props.disabled, true);
-  await submit();
-  assert.equal(bindings.length, 2, 'busy form cannot submit twice');
-  await act(async () => {
-    finishBinding({ ok: true, value: snapshot });
-    await flushTasks();
-  });
-  assert.equal(renderer.root.findAllByType('form').length, 0);
-  assert.match(nodeText(renderer.root), /Lark 机器人凭据已绑定/);
-  assert.equal(en['应用平台'], 'App platform');
-});
 
 test('credential form stays compact while using a protected password input', () => {
   const markup = renderToStaticMarkup(React.createElement(CredentialBindingPanel, {
@@ -855,7 +531,7 @@ test('credential form stays compact while using a protected password input', () 
   assert.doesNotMatch(markup, /value="[^"]+"/);
 });
 
-test('scan actions align left while online totals align right in every channel', async () => {
+test('scan actions align left while online totals align right in QQ', async () => {
   const [imStyles, feishuStyles, weixinStyles, dingtalkStyles, wecomStyles, feishuSource, weixinSource, dingtalkSource, wecomSource] = await Promise.all([
     readFile(STYLES_URL, 'utf8'),
     readFile(FEISHU_STYLES_URL, 'utf8'),
@@ -872,10 +548,7 @@ test('scan actions align left while online totals align right in every channel',
   assert.match(imStyles, /\.dim-panel \.dim-bindActions > button \{[^}]*min-width: 0;/);
   assert.match(imStyles, /\.dim-panel \.bxf-headingTools \.dim-scanButton,[^}]*justify-self: start;/);
   assert.match(imStyles, /\.dim-panel \.bxf-headingTools \.dim-onlineBadge,[^}]*justify-self: end;/);
-  assert.match(feishuStyles, /\.bxf-headingTools \{[^}]*justify-content: space-between;/);
-  assert.match(weixinStyles, /\.dxw-tools \{[^}]*justify-content: space-between;/);
   assert.match(dingtalkStyles, /\.ddt-tools \{[^}]*justify-content: space-between;/);
-  assert.match(wecomStyles, /\.dwecom-page/);
 
   const headingSource = (source) => source.slice(
     source.indexOf('function Heading'),
@@ -885,12 +558,9 @@ test('scan actions align left while online totals align right in every channel',
   const weixinHeading = headingSource(weixinSource);
   const dingtalkHeading = headingSource(dingtalkSource);
   const wecomHeading = headingSource(wecomSource);
-  assert.ok(feishuHeading.indexOf('扫码接入机器人') < feishuHeading.indexOf('bxf-totalBadge'));
-  assert.ok(weixinHeading.indexOf('扫码接入机器人') < weixinHeading.indexOf('dxw-badge'));
   assert.ok(dingtalkHeading.indexOf('扫码接入机器人') < dingtalkHeading.indexOf('ddt-badge'));
-  assert.ok(wecomHeading.indexOf('扫码接入机器人') < wecomHeading.indexOf('ddt-badge'));
 
-  for (const heading of [feishuHeading, weixinHeading, dingtalkHeading, wecomHeading]) {
+  for (const heading of [dingtalkHeading]) {
     assert.match(heading, /dim-scanButton/);
     assert.match(heading, /dim-onlineBadge/);
   }
@@ -901,7 +571,7 @@ test('scan actions align left while online totals align right in every channel',
 });
 
 test('channel headings omit the redundant local credential badge', () => {
-  const components = [FeishuSettingsTab, WeixinSettingsTab, DingtalkSettingsTab, WecomSettingsTab];
+  const components = [QqSettingsTab];
 
   for (const Component of components) {
     const markup = renderToStaticMarkup(React.createElement(Component, {
@@ -949,7 +619,7 @@ test('all channel settings states use the DingTalk page treatment', async () => 
     readFile(WECOM_SOURCE_URL, 'utf8'),
   ]);
 
-  for (const Component of [FeishuSettingsTab, WeixinSettingsTab, DingtalkSettingsTab, WecomSettingsTab]) {
+  for (const Component of [QqSettingsTab]) {
     const markup = renderToStaticMarkup(React.createElement(Component, {
       rpcCall: async () => ({ ok: true, value: {} }),
     }));
@@ -991,7 +661,7 @@ test('bot cards reuse the same channel brand logos as the channel rail', () => {
     dingtalkRpcCall: async () => ({ ok: true, value: {} }),
     wecomRpcCall: async () => ({ ok: true, value: {} }),
   }));
-  const accountMarkup = renderToStaticMarkup(React.createElement(WeixinAccountCard, {
+  const accountMarkup = renderToStaticMarkup(React.createElement(QqAccountCard, {
     account: {
       botId: 'bot-weixin-card',
       state: 'connected',
@@ -1006,13 +676,11 @@ test('bot cards reuse the same channel brand logos as the channel rail', () => {
     onCancelRemove() {},
   }));
 
-  assert.match(railMarkup, /data-im-channel-logo="weixin"/);
-  assert.match(railMarkup, /data-im-channel-logo="feishu"/);
-  assert.match(railMarkup, /data-im-channel-logo="wecom"/);
-  assert.match(accountMarkup, /class="dxw-card dim-botCard"/);
-  assert.match(accountMarkup, /class="dxw-avatar dim-botAvatar"[^]*data-im-channel-logo="weixin"/);
-  assert.match(accountMarkup, /class="dxw-health dim-botHealth"/);
-  assert.match(accountMarkup, /class="dxw-accountFooter dim-cardFooter"/);
+  assert.match(railMarkup, /data-im-channel-logo="qq"/);
+  assert.match(accountMarkup, /class="ddt-card dim-botCard"/);
+  assert.match(accountMarkup, /class="ddt-avatar dim-botAvatar dqq-avatar"[^]*data-im-channel-logo="qq"/);
+  assert.match(accountMarkup, /class="ddt-health dim-botHealth"/);
+  assert.match(accountMarkup, /class="ddt-accountFooter dim-cardFooter"/);
   assert.match(accountMarkup, /class="dim-presetSelect"/);
   assert.doesNotMatch(accountMarkup, /dim-cardSummary|微信消息长轮询运行正常/);
   assert.equal((accountMarkup.match(/dim-cardAction(?: |")/g) ?? []).length, 2);
@@ -1021,74 +689,8 @@ test('bot cards reuse the same channel brand logos as the channel rail', () => {
   assert.doesNotMatch(accountMarkup, /收到 \/ 回复/);
 });
 
-test('Enterprise WeChat cards reuse the rail logo and compact action treatment', () => {
-  const markup = renderToStaticMarkup(React.createElement(WecomAccountCard, {
-    account: {
-      botId: 'wecom-card', state: 'connected', connected: true,
-      bot: { name: '企业微信机器人', appIdMasked: 'bot••••001' },
-      health: { summary: '企业微信 WebSocket 长连接运行正常', lastCheckedAt: Date.now() },
-    },
-    onReconnect() {}, onRequestRemove() {}, onConfirmRemove() {}, onCancelRemove() {},
-  }));
-  assert.match(markup, /data-im-channel-logo="wecom"/);
-  assert.equal((markup.match(/dim-cardAction(?: |")/g) ?? []).length, 2);
-  assert.match(markup, /class="dim-lastChecked"><span>最近检查<\/span>/);
-  assert.doesNotMatch(markup, /消息通道|dim-botMetric/);
-});
 
-test('DingTalk bot cards omit the redundant received and replied metric', () => {
-  const markup = renderToStaticMarkup(React.createElement(DingtalkAccountCard, {
-    account: {
-      botId: 'bot-dingtalk-card',
-      state: 'connected',
-      connected: true,
-      bot: { name: '钉钉机器人', clientIdMasked: 'ding••••oioy' },
-      stats: { messagesReceived: 2, messagesReplied: 2 },
-      health: { summary: 'Stream 长连接运行正常', lastCheckedAt: '2026-08-15T07:30:49.000Z' },
-    },
-    onReconnect() {},
-    onRequestRemove() {},
-    onConfirmRemove() {},
-    onCancelRemove() {},
-  }));
 
-  assert.match(markup, /class="ddt-card dim-botCard"/);
-  assert.match(markup, /class="ddt-health dim-botHealth"/);
-  assert.match(markup, /class="dim-lastChecked"><span>最近检查<\/span>/);
-  assert.match(markup, /class="ddt-accountFooter dim-cardFooter"/);
-  assert.doesNotMatch(markup, /dim-cardSummary|Stream 长连接运行正常/);
-  assert.equal((markup.match(/dim-cardAction(?: |")/g) ?? []).length, 2);
-  assert.doesNotMatch(markup, /消息通道|dim-botMetric/);
-  assert.doesNotMatch(markup, /收到 \/ 回复/);
-});
-
-test('DingTalk connection failures show actionable guidance and a log reference', () => {
-  const markup = renderToStaticMarkup(React.createElement(DingtalkAccountCard, {
-    account: {
-      botId: 'bot-dingtalk-failed',
-      state: 'error',
-      connected: false,
-      bot: { name: '钉钉机器人', clientIdMasked: 'ding••••fail' },
-      health: { summary: '连接失败', lastCheckedAt: null },
-      error: {
-        code: 'stream-proxy-dependency-incompatible',
-        message: '钉钉 Stream 连接失败：检测到代理依赖 agent-base 6.0.0。',
-        hint: '请将 agent-base@6 固定为 6.0.2 后重新安装依赖。',
-        referenceId: 'DT-CONN-DEADBEEF',
-      },
-    },
-    onReconnect() {},
-    onRequestRemove() {},
-    onConfirmRemove() {},
-    onCancelRemove() {},
-  }));
-
-  assert.match(markup, /agent-base 6\.0\.0/);
-  assert.match(markup, /agent-base@6 固定为 6\.0\.2/);
-  assert.match(markup, /stream-proxy-dependency-incompatible/);
-  assert.match(markup, /DT-CONN-DEADBEEF/);
-  assert.match(markup, /data-connection-diagnostic="true"/);
-});
 
 test('all IM channel cards keep localized actions visible above full-width feedback', async () => {
   const [imStyles, feishuStyles, weixinStyles, dingtalkStyles] = await Promise.all([
@@ -1098,8 +700,6 @@ test('all IM channel cards keep localized actions visible above full-width feedb
     readFile(DINGTALK_STYLES_URL, 'utf8'),
   ]);
 
-  assert.match(feishuStyles, /\.bxf-botActions \{[^}]*width: 100%;[^}]*flex-wrap: wrap;/);
-  assert.match(weixinStyles, /\.dxw-accountFooter \.dxw-actions \{[^}]*flex-wrap: nowrap;/);
   assert.match(dingtalkStyles, /\.ddt-accountFooter \.ddt-actions \{[^}]*flex-wrap: nowrap;/);
   assert.match(imStyles, /\.dim-panel \.dim-cardFooter \{[^}]*gap: 12px;[^}]*padding-top: 6px;[^}]*border-top: 1px solid/);
   assert.match(imStyles, /\.dim-panel \.dim-cardFooterLayout \{[^}]*width: 100%;[^}]*flex-direction: column;[^}]*align-items: stretch;/);
@@ -1134,15 +734,7 @@ test('all IM channel cards keep localized actions visible above full-width feedb
   };
   const notice = '测试消息已发送，请到对应机器人会话中确认。';
   const cards = [
-    ['飞书', FeishuBotCard, { connection: account, testNotice: notice }],
-    ['微信', WeixinAccountCard, { account, feedback: notice }],
-    ['钉钉', DingtalkAccountCard, { account, feedback: notice }],
-    ['企业微信', WecomAccountCard, { account, feedback: notice }],
     ['QQ', QqAccountCard, { account, feedback: notice }],
-    ['Slack', SlackAccountCard, { account, testNotice: notice }],
-    ['Telegram', TelegramAccountCard, { account, testNotice: notice }],
-    ['Discord', DiscordAccountCard, { account, testNotice: notice }],
-    ['WhatsApp', WhatsappAccountCard, { account, testNotice: notice }],
   ];
 
   for (const [channel, Card, props] of cards) {
@@ -1200,20 +792,6 @@ test('bot cards keep Agent Preset guidance in a keyboard-accessible help tooltip
   assert.doesNotMatch(styles, /\.dim-panel \.dim-presetHelp \{[^}]*grid-row: 3;/);
 });
 
-test('the bundled DingTalk channel has no local sender approval workflow', async () => {
-  const [source, bundle] = await Promise.all([
-    readFile(DINGTALK_CLIENT_SOURCE_URL, 'utf8'),
-    readFile(CLIENT_BUNDLE_URL, 'utf8'),
-  ]);
-
-  assert.equal('approveSender' in DINGTALK_ENDPOINTS, false);
-  assert.equal('revokeSender' in DINGTALK_ENDPOINTS, false);
-  assert.doesNotMatch(source, /SenderAccess|onApprove|onRevoke|approveSender|revokeSender/);
-  assert.doesNotMatch(
-    bundle,
-    /bot\.sender\.approve|bot\.sender\.revoke|允许使用机器人的钉钉账号|批准使用/,
-  );
-});
 
 test('the client dictionaries have no duplicate object keys', async () => {
   // A duplicate Chinese key silently drops one of the two translations, which no
@@ -1338,21 +916,19 @@ test('client registers one top-level bilingual IM settings section with a direct
     assert.deepEqual(Object.keys(dictionaries[0].value.en).sort(), Object.keys(dictionaries[0].value.zh).sort());
     assert.equal(registrations.length, 1);
     assert.equal(registrations[0].options.name, 'settings.section');
-    assert.equal(registrations[0].options.id, 'xmanrui-dsh-im');
+    assert.equal(registrations[0].options.id, 'ryn-mic-dsh-qq');
     assert.equal(registrations[0].options.order, 21);
     assert.equal(registrations[0].options.locale, IM_LOCALE_NAMESPACE);
-    assert.equal(registrations[0].options.label(), 'IM bots');
+    assert.equal(registrations[0].options.label(), 'QQ bot');
     assert.equal(typeof registrations[0].component, 'function');
 
     const injected = registrations[0].options.inject();
     const signal = new AbortController().signal;
-    await injected.updateRpcCall('update.status', {}, signal);
     await injected.globalSettingsRpcCall('settings.inbound-ttl.get', {}, signal);
-    await injected.imessageRpcCall('connection.status', {}, signal);
+    await injected.qqRpcCall('connection.status', {}, signal);
     assert.deepEqual(rpcCalls, [
-      ['/api', 'dsh-im/dsh-im', { method: 'update.status', payload: {} }, signal],
       ['/api', `dsh-im${GLOBAL_SETTINGS_RPC_CHANNEL}`, { method: 'settings.inbound-ttl.get', payload: {} }, signal],
-      ['/api', 'dsh-im/imessage', { method: 'connection.status', payload: {} }, signal],
+      ['/api', 'dsh-im/qq', { method: 'connection.status', payload: {} }, signal],
     ]);
     assert.deepEqual(
       await injected.workspaceDirectoryPicker.listDirectory('/workspace/current', signal),
@@ -1390,9 +966,7 @@ test('client registers one top-level bilingual IM settings section with a direct
     ));
     assert.match(markup, /Help &amp; feedback · Open GitHub/);
     assert.match(markup, /General settings/);
-    assert.match(markup, />WeChat<|>Feishu<|>DingTalk<|>WeCom</);
-    assert.match(markup, />QQ<[^]*>Slack<[^]*>Telegram<[^]*>Discord<[^]*>WhatsApp</);
-    assert.match(markup, />AI Office<\/strong><small class="dim-channelNote">\(Experimental\)<\/small>/);
+    assert.match(markup, />QQ</);
     assert.doesNotMatch(markup, /[\p{Script=Han}]/u);
   } finally {
     setImTranslator(null);
@@ -1466,7 +1040,7 @@ test('client directory picker uses the current DSH uiWorkspace service', async (
   }
 });
 
-test('all nine channel settings and connected cards render English copy', () => {
+test('QQ settings and connected cards render English copy', () => {
   const rpcCall = async () => ({ ok: true, value: {} });
   const noop = () => {};
   const account = {
@@ -1496,33 +1070,13 @@ test('all nine channel settings and connected cards render English copy', () => 
     assert.doesNotMatch(globalMarkup, /[\p{Script=Han}]/u);
 
     const pages = [
-      WeixinSettingsTab,
-      FeishuSettingsTab,
-      DingtalkSettingsTab,
-      WecomSettingsTab,
-      WecomAppSettingsTab,
       QqSettingsTab,
-      SlackSettingsTab,
-      TelegramSettingsTab,
-      DiscordSettingsTab,
-      WhatsappSettingsTab,
-      IMessageSettingsTab,
     ];
     const pageMarkup = pages.map((Component) =>
       renderToStaticMarkup(React.createElement(Component, { rpcCall }))).join('\n');
     assert.match(pageMarkup, /Scan QR code/);
     assert.match(pageMarkup, /Manual setup/);
-    assert.match(pageMarkup, /Loading WeChat connection status/);
-    assert.match(pageMarkup, /Loading Feishu bots/);
-    assert.match(pageMarkup, /Loading DingTalk connection status/);
-    assert.match(pageMarkup, /Loading WeCom bot status/);
-    assert.match(pageMarkup, /Loading WeCom app status/);
     assert.match(pageMarkup, /Loading QQ bot status/);
-    assert.match(pageMarkup, /Loading Slack bot status/);
-    assert.match(pageMarkup, /Loading Telegram bot status/);
-    assert.match(pageMarkup, /Loading Discord bot status/);
-    assert.match(pageMarkup, /Loading WhatsApp bot status/);
-    assert.match(pageMarkup, /Loading iMessage bot status/);
     assert.doesNotMatch(pageMarkup, /[\p{Script=Han}]/u);
 
     const sharedCardProps = {
@@ -1533,16 +1087,7 @@ test('all nine channel settings and connected cards render English copy', () => 
       onCancelRemove: noop,
     };
     const cards = [
-      React.createElement(WeixinAccountCard, { ...sharedCardProps, account }),
-      React.createElement(FeishuBotCard, { ...sharedCardProps, connection: account }),
-      React.createElement(DingtalkAccountCard, { ...sharedCardProps, account }),
-      React.createElement(WecomAccountCard, { ...sharedCardProps, account }),
       React.createElement(QqAccountCard, { ...sharedCardProps, account }),
-      React.createElement(SlackAccountCard, { ...sharedCardProps, account }),
-      React.createElement(TelegramAccountCard, { ...sharedCardProps, account }),
-      React.createElement(DiscordAccountCard, { ...sharedCardProps, account }),
-      React.createElement(WhatsappAccountCard, { ...sharedCardProps, account }),
-      React.createElement(IMessageAccountCard, { ...sharedCardProps, account }),
     ];
     const cardMarkup = cards.map(renderToStaticMarkup).join('\n');
     assert.match(cardMarkup, /Connected/);
@@ -1572,13 +1117,13 @@ test('all nine channel settings and connected cards render English copy', () => 
   }
 });
 
-test('every channel tab receives its RPC call from the settings render site', async () => {
+test('QQ tab receives its RPC call from the settings render site', async () => {
   // Regression guard: the render site lists one prop per channel by hand. When
   // a new channel was added to the tab list but not to that list, its settings
   // page mounted without an RPC call and rendered "missing RPC connection".
   const source = await readFile(new URL('index.js', CLIENT_SOURCE_DIRECTORY_URL), 'utf8');
   const tabIds = [...source.matchAll(/\{\s*id:\s*'([a-zA-Z]+)',\s*label:/g)].map(m => m[1]);
-  assert.ok(tabIds.length >= 12, `expected the channel tab list, found ${tabIds.length}`);
+  assert.ok(tabIds.length === 1, `expected the channel tab list, found ${tabIds.length}`);
 
   // Parse the dependency block that feeds IMSettingsTab. Upstream (#231)
   // refactored the render site into a reusable panel, so the props now come
@@ -1598,28 +1143,9 @@ test('every channel tab receives its RPC call from the settings render site', as
   const missing = tabIds
     .map((id) => `${id}RpcCall`)
     .filter((name) => !providedProps.has(name));
-  assert.deepEqual(missing, [], 'every channel tab must receive its RPC call prop');
+  assert.deepEqual(missing, [], 'QQ tab must receive its RPC call prop');
 });
 
-test('the Email settings form forwards every mailbox field to the bind RPC', async () => {
-  // Regression guard: credentialPayload reduced the form values to an empty
-  // object, so the Host received no address and rejected a valid mailbox with
-  // "邮箱地址格式不正确". The payload must reach the RPC intact.
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const values = {
-    address: 'user@qq.com',
-    password: 'app-password',
-    provider: 'qq',
-    allowedSenders: ['boss@example.com'],
-  };
-  assert.deepEqual(
-    EMAIL_SETTINGS_DEFINITION.credentialPayload(values),
-    values,
-    'the mailbox form payload must pass through unchanged',
-  );
-});
 
 test('the token settings tab wires the RPC bridge into the account card', async () => {
   // Regression guard: the settings tab owns the RPC bridge and passes it down
@@ -1656,521 +1182,4 @@ test('the token settings tab wires the RPC bridge into the account card', async 
   // The extra settings panels need the bridge and a way to refresh.
   assert.ok(supplied.has('rpcCall'), 'the RPC bridge must reach the account card');
   assert.ok(supplied.has('reload'), 'a refresh callback must reach the account card');
-});
-
-test('the Email account card renders its settings panel without crashing', async () => {
-  const { EmailAccountCard } = await import('../plugin-src/client/channels/email/index.js');
-  const calls = [];
-  const rpcCall = async (endpoint) => {
-    calls.push(endpoint);
-    if (endpoint === 'bot.session-binding.get') {
-      return { ok: true, value: { account: null, senders: {}, knownSenders: ['boss@example.com'] } };
-    }
-    if (endpoint === 'bot.session.list') {
-      return { ok: true, value: { workspace: '/tmp', sessions: [{ sessionId: 'session-1', title: 'T1' }] } };
-    }
-    return { ok: true, value: {} };
-  };
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(EmailAccountCard, {
-      account: {
-        botId: 'email-account-card', state: 'connected', connected: true,
-        bot: { name: 'user@qq.com', idMasked: 'us****@qq.com' },
-        allowedSenders: ['boss@example.com'], health: { summary: '邮箱通道运行正常' },
-      },
-      rpcCall,
-      onReconnect() {}, onRequestRemove() {}, onConfirmRemove() {}, onCancelRemove() {},
-    }));
-  });
-  const labels = renderer.root
-    .findAll((node) => node.type === 'button')
-    .map((button) => (button.children ?? []).filter((c) => typeof c === 'string').join(''));
-  assert.ok(labels.includes('保存绑定'), 'the binding panel must mount');
-  assert.ok(calls.includes('bot.session-binding.get'), 'the panel must read the current binding');
-  assert.ok(calls.includes('bot.session.list'), 'the panel must list bindable sessions');
-  renderer.unmount();
-});
-
-
-test('the Email connector form follows the chosen transport', async () => {
-  // One channel serves every mail protocol: the transport choice decides which
-  // fields are collected, so an Agent mailbox is never asked for an app
-  // password or IMAP/SMTP hosts it does not have.
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const Panel = EMAIL_SETTINGS_DEFINITION.CredentialPanel;
-  // Read the label text by walking the tree: React renders a text child as a
-  // node, so reading `children` directly returns objects, not strings.
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  const fieldLabels = (renderer) => renderer.root
-    .findAll((node) => node.type === 'label')
-    .map((label) => textOf(label.children).trim())
-    .filter(Boolean);
-
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(Panel, {
-      busy: false, error: null, onSubmit() {}, onCancel() {},
-    }));
-  });
-
-  const selects = () => renderer.root.findAll((node) => node.type === 'select');
-  const transportSelect = () => selects().find((select) => [...select.props.children]
-    .some((option) => option.props.value === 'agent-mail'));
-
-  assert.ok(transportSelect(), 'the form must offer a transport choice');
-  // A label carries its hint text too, so the field is matched by prefix.
-  const hasField = (labels, name) => labels.some((label) => label.startsWith(name));
-  const imapFields = fieldLabels(renderer);
-  assert.ok(hasField(imapFields, '应用密码 / 授权码'), 'IMAP asks for an app password');
-  assert.ok(hasField(imapFields, '邮箱服务商'), 'IMAP asks for a provider');
-
-  await TestRenderer.act(async () => {
-    transportSelect().props.onChange({ target: { value: 'agent-mail' } });
-  });
-  const agentFields = fieldLabels(renderer);
-  assert.ok(!hasField(agentFields, '应用密码 / 授权码'),
-    'an Agent mailbox authorizes by QR code, so no password is collected');
-  assert.ok(!hasField(agentFields, '邮箱服务商'), 'it has no provider to choose');
-  assert.ok(hasField(agentFields, '邮箱地址'));
-  assert.ok(hasField(agentFields, '允许的发件人'));
-  renderer.unmount();
-});
-
-test('the Email connector submits the fields for the standard transport', async () => {
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const submitted = [];
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(
-      EMAIL_SETTINGS_DEFINITION.CredentialPanel,
-      { busy: false, error: null, onSubmit: (v) => submitted.push(v), onCancel() {} },
-    ));
-  });
-
-  const texts = () => renderer.root.findAll((node) => node.type === 'input' || node.type === 'textarea');
-  // Address is the only text input in Agent mode.
-  // The standard mode is where the address is typed; in Agent mode it arrives
-  // with the authorization and the field is read-only.
-  const addressInput = texts().find((input) => input.props.type === 'email');
-  assert.equal(typeof addressInput.props.onChange, 'function',
-    'the standard mode lets the address be typed');
-  await TestRenderer.act(async () => {
-    addressInput.props.onChange({ target: { value: 'bot@agent.qq.com' } });
-  });
-  // The standard mode also collects the app password.
-  const passwordInput = texts().find((input) => input.props.type === 'password');
-  await TestRenderer.act(async () => {
-    passwordInput.props.onChange({ target: { value: 'app-password' } });
-  });
-  const allowlist = texts().find((input) => input.type === 'textarea');
-  await TestRenderer.act(async () => {
-    allowlist.props.onChange({ target: { value: 'boss@corp.com' } });
-  });
-  const connect = renderer.root.findAll((node) => node.type === 'button')
-    .find((b) => (b.children ?? []).includes('连接邮箱'));
-  await TestRenderer.act(async () => { connect.props.onClick(); });
-
-  assert.equal(submitted.length, 1);
-  assert.equal(submitted[0].transport, 'imap-smtp');
-  assert.equal(submitted[0].address, 'bot@agent.qq.com');
-  assert.deepEqual(submitted[0].allowedSenders, ['boss@corp.com']);
-  // The standard mode carries the app password it collected.
-  assert.equal(submitted[0].password, 'app-password');
-  renderer.unmount();
-});
-test('the connector form requires authorization before binding an Agent mailbox', async () => {
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(
-      EMAIL_SETTINGS_DEFINITION.CredentialPanel,
-      {
-        busy: false, error: null, onSubmit() {}, onCancel() {},
-        rpcCall: async () => ({ ok: true, value: {} }), endpoints: {},
-      },
-    ));
-  });
-  const buttons = () => renderer.root.findAll((node) => node.type === 'button')
-    .map((b) => textOf(b.children));
-  const submit = () => renderer.root.findAll((node) => node.type === 'button')
-    .find((b) => textOf(b.children) === '连接邮箱');
-
-  // Agent mode offers the authorization step instead of a password.
-  const transportSelect = renderer.root.findAll((node) => node.type === 'select')
-    .find((select) => [...select.props.children]
-      .some((option) => option.props.value === 'agent-mail'));
-  await TestRenderer.act(async () => {
-    transportSelect.props.onChange({ target: { value: 'agent-mail' } });
-  });
-  assert.ok(buttons().includes('生成授权链接'), 'the authorization step must be offered');
-  const address = renderer.root.findAll((node) => node.type === 'input')
-    .find((input) => input.props.type === 'email');
-  // The Agent mailbox address arrives with the authorization, so it may be
-  // read-only here; set it only when the field is editable.
-  if (typeof address.props.onChange === 'function') {
-    await TestRenderer.act(async () => {
-      address.props.onChange({ target: { value: 'bot@agent.qq.com' } });
-    });
-  }
-  assert.equal(submit().props.disabled, true,
-    'the mailbox cannot be bound before the authorization completes');
-  renderer.unmount();
-});
-test('a completed authorization connects without a second click', async () => {
-  // The panel says "connecting", so it must actually connect. Requiring
-  // another click stranded users who had already scanned — and a reload threw
-  // the tokens away.
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const submitted = [];
-  const rpcCall = async (endpoint) => {
-    if (endpoint === 'bot.auth.start') {
-      return { ok: true, value: {
-        browserUrl: 'https://agent.qq.com/a', inputCode: 'ic_1', expiresInMs: 600_000,
-      } };
-    }
-    if (endpoint === 'bot.auth.poll') {
-      // The server resolves the address, which the panel fills in itself.
-      return { ok: true, value: {
-        authorized: true,
-        address: 'bot@agent.qq.com',
-      } };
-    }
-    return { ok: true, value: {} };
-  };
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(
-      EMAIL_SETTINGS_DEFINITION.CredentialPanel,
-      {
-        busy: false, error: null, onCancel() {},
-        onSubmit: (value) => submitted.push(value),
-        rpcCall,
-        endpoints: { startAuth: 'bot.auth.start', pollAuth: 'bot.auth.poll' },
-      },
-    ));
-  });
-  const button = (label) => renderer.root.findAll((node) => node.type === 'button')
-    .find((b) => textOf(b.children) === label);
-
-  // Choose the Agent mailbox, then supply the fields the bind needs.
-  const transportSelect = renderer.root.findAll((node) => node.type === 'select')
-    .find((select) => [...select.props.children]
-      .some((option) => option.props.value === 'agent-mail'));
-  await TestRenderer.act(async () => {
-    transportSelect.props.onChange({ target: { value: 'agent-mail' } });
-  });
-  const address = renderer.root.findAll((node) => node.type === 'input')
-    .find((input) => input.props.type === 'email');
-  // The Agent mailbox address arrives with the authorization, so it may be
-  // read-only here; set it only when the field is editable.
-  if (typeof address.props.onChange === 'function') {
-    await TestRenderer.act(async () => {
-      address.props.onChange({ target: { value: 'bot@agent.qq.com' } });
-    });
-  }
-  const allowlist = renderer.root.findAll((node) => node.type === 'textarea')[0];
-  await TestRenderer.act(async () => {
-    allowlist.props.onChange({ target: { value: 'boss@corp.com' } });
-  });
-
-  await TestRenderer.act(async () => { button('生成授权链接').props.onClick(); });
-  // Let the poll interval observe the authorization.
-  await TestRenderer.act(async () => { await new Promise((r) => { setTimeout(r, 3_400); }); });
-
-  assert.equal(submitted.length, 1, 'the authorization submits the bind on its own');
-  assert.equal(submitted[0].transport, 'agent-mail');
-  assert.equal(submitted[0].address, 'bot@agent.qq.com');
-  // agently-cli keeps the credentials, so no token travels through the bind.
-  assert.equal(submitted[0].accessToken, undefined);
-  assert.equal(submitted[0].address, 'bot@agent.qq.com');
-  assert.deepEqual(submitted[0].allowedSenders, ['boss@corp.com']);
-  renderer.unmount();
-});
-
-test('the bindable session list refreshes while the panel stays open', async () => {
-  // Sessions are created elsewhere, so a list fetched once when the panel
-  // opened goes stale: a conversation started a minute ago never appeared.
-  const { EmailAccountCard } = await import('../plugin-src/client/channels/email/index.js');
-  const listings = [];
-  let sessionList = [{ sessionId: 'session-1', title: 'First' }];
-  const rpcCall = async (endpoint) => {
-    if (endpoint === 'bot.session-binding.get') {
-      return { ok: true, value: { account: 'session-1', senders: {}, knownSenders: ['a@x.com'] } };
-    }
-    if (endpoint === 'bot.session.list') {
-      listings.push(sessionList.length);
-      return { ok: true, value: { workspace: '/tmp', sessions: sessionList } };
-    }
-    return { ok: true, value: {} };
-  };
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(EmailAccountCard, {
-      account: {
-        botId: 'e1', state: 'connected', connected: true,
-        bot: { name: 'me@agent.qq.com' }, allowedSenders: ['a@x.com'],
-        health: { summary: 'ok' },
-      },
-      rpcCall, onReconnect() {}, onRequestRemove() {}, onConfirmRemove() {}, onCancelRemove() {},
-    }));
-  });
-  const before = listings.length;
-
-  // A new conversation appears elsewhere while the panel is open.
-  await TestRenderer.act(async () => {
-    sessionList = [...sessionList, { sessionId: 'session-2', title: 'Second' }];
-  });
-  const optionsOf = () => renderer.root
-    .findAll((node) => node.type === 'option')
-    .map((option) => String(option.props.children ?? ''));
-  assert.ok(optionsOf().some((label) => label.includes('First')), 'the first session is listed');
-
-  // The refresh button re-reads immediately.
-  const refresh = renderer.root.findAll((node) => node.type === 'button')
-    .find((b) => (b.children ?? []).includes('刷新会话列表'));
-  assert.ok(refresh, 'a refresh control is offered');
-  await TestRenderer.act(async () => { refresh.props.onClick(); });
-  await TestRenderer.act(async () => { await new Promise((r) => { setTimeout(r, 50); }); });
-
-  assert.ok(listings.length > before, 'the list is re-read on demand');
-  assert.ok(optionsOf().some((label) => label.includes('Second')),
-    'a session created while the panel was open appears');
-  renderer.unmount();
-});
-
-test('saving the allowlist refreshes the per-sender rows', async () => {
-  // The allowlist decides which senders the binding panel offers. Saving it
-  // reloaded channel state but not that panel, so a newly allowed sender never
-  // appeared as a row — the value was stored and simply not shown.
-  const { EmailAccountCard } = await import('../plugin-src/client/channels/email/index.js');
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  let knownSenders = ['a@x.com'];
-  const calls = [];
-  const rpcCall = async (endpoint) => {
-    calls.push(endpoint);
-    if (endpoint === 'bot.session-binding.get') {
-      return { ok: true, value: { account: null, senders: {}, knownSenders: [...knownSenders] } };
-    }
-    if (endpoint === 'bot.session.list') {
-      return { ok: true, value: { workspace: '/tmp', sessions: [] } };
-    }
-    return { ok: true, value: {} };
-  };
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(EmailAccountCard, {
-      account: {
-        botId: 'e1', state: 'connected', connected: true,
-        bot: { name: 'me@agent.qq.com' }, allowedSenders: ['a@x.com'],
-        health: { summary: 'ok' },
-      },
-      rpcCall, onReconnect() {}, onRequestRemove() {}, onConfirmRemove() {}, onCancelRemove() {},
-    }));
-  });
-  const senderRows = () => renderer.root
-    .findAll((node) => String(node.props?.className ?? '').includes('dim-emailBindingSender'))
-    .map((node) => textOf(node.children));
-  assert.deepEqual(senderRows(), ['a@x.com']);
-
-  // A second address is allowed and the form is saved.
-  knownSenders = ['a@x.com', 'newboss@corp.com'];
-  const allowlist = renderer.root.findAll((node) => node.type === 'textarea')[0];
-  await TestRenderer.act(async () => {
-    allowlist.props.onChange({ target: { value: 'a@x.com\nnewboss@corp.com' } });
-  });
-  const save = renderer.root.findAll((node) => node.type === 'button')
-    .find((b) => textOf(b.children) === '保存');
-  await TestRenderer.act(async () => { await save.props.onClick(); });
-  await TestRenderer.act(async () => { await new Promise((r) => { setTimeout(r, 100); }); });
-
-  assert.ok(calls.filter((c) => c === 'bot.session-binding.get').length > 1,
-    'the binding panel is re-read when the allowlist changes');
-  assert.deepEqual(senderRows(), ['a@x.com', 'newboss@corp.com'],
-    'a newly allowed sender gets a row');
-  renderer.unmount();
-});
-
-test('a bound agent mailbox offers re-authorization', async () => {
-  // agently-cli holds the login and it can lapse. Reconnecting cannot fix
-  // that, so the card must offer the scan again — otherwise the only way back
-  // was to remove and re-add the mailbox.
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  const called = [];
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(
-      EMAIL_SETTINGS_DEFINITION.AccountSettings,
-      {
-        account: {
-          botId: 'e1', platformId: 'diyhome@agent.qq.com', transport: 'agent-mail',
-          allowedSenders: ['a@x.com'], connected: false,
-        },
-        busy: false, error: null, onSave: async () => {}, onCancel() {},
-        rpcCall: async (endpoint, payload) => {
-          called.push({ endpoint, payload });
-          if (endpoint === 'bot.auth.start') {
-            return { ok: true, value: {
-              browserUrl: 'https://agent.qq.com/page/oauth?oauth_type=device&user_code=uc_T',
-              inputCode: 'uc_T', expiresInMs: 600_000,
-            } };
-          }
-          return { ok: true, value: {} };
-        },
-        endpoints: {
-          startAuth: 'bot.auth.start', pollAuth: 'bot.auth.poll',
-          listSessions: 'bot.session.list', getBinding: 'bot.session-binding.get',
-          setBinding: 'bot.session-binding.set',
-        },
-        onChanged: async () => {},
-      },
-    ));
-  });
-  const button = renderer.root.findAll((node) => node.type === 'button')
-    .find((b) => textOf(b.children) === '重新扫码授权');
-  assert.ok(button, 'a bound Agent mailbox offers re-authorization');
-
-  await TestRenderer.act(async () => { button.props.onClick(); });
-  // The link is the whole point of the control: the panel said it had one and
-  // showed nothing, so the user had nothing to scan.
-  const links = renderer.root.findAll((node) => node.type === 'a').map((a) => a.props.href);
-  assert.ok(links.some((href) => String(href ?? '').includes('agent.qq.com/page/oauth')),
-    'the authorization link is shown after it is generated');
-  const start = called.find((c) => c.endpoint === 'bot.auth.start');
-  assert.ok(start, 'the scan is started');
-  assert.equal(start.payload.workspace, 'diyhome@agent.qq.com',
-    'the scan lands in the workspace this mailbox reads from');
-  renderer.unmount();
-});
-
-test('an IMAP mailbox is not offered re-authorization', async () => {
-  const { EMAIL_SETTINGS_DEFINITION } = await import(
-    '../plugin-src/client/channels/email/index.js'
-  );
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(
-      EMAIL_SETTINGS_DEFINITION.AccountSettings,
-      {
-        account: {
-          botId: 'e2', platformId: 'me@qq.com', transport: 'imap-smtp',
-          allowedSenders: ['a@x.com'], connected: true,
-        },
-        busy: false, error: null, onSave: async () => {}, onCancel() {},
-        rpcCall: async () => ({ ok: true, value: {} }),
-        endpoints: {
-          startAuth: 'bot.auth.start', pollAuth: 'bot.auth.poll',
-          listSessions: 'bot.session.list', getBinding: 'bot.session-binding.get',
-          setBinding: 'bot.session-binding.set',
-        },
-        onChanged: async () => {},
-      },
-    ));
-  });
-  const labels = renderer.root.findAll((node) => node.type === 'button').map((b) => textOf(b.children));
-  assert.ok(!labels.includes('重新扫码授权'),
-    'a password mailbox has nothing to re-authorize');
-  renderer.unmount();
-});
-
-test('the email entry point stays hidden while the Host reports the channel closed', async () => {
-  const textOf = (node) => {
-    if (typeof node === 'string') return node;
-    if (Array.isArray(node)) return node.map(textOf).join('');
-    if (node?.children) return textOf(node.children);
-    return '';
-  };
-  const rpcCalls = Object.fromEntries(
-    ['feishu', 'weixin', 'dingtalk', 'wecom', 'wecomApp', 'qq', 'slack', 'telegram',
-      'discord', 'whatsapp', 'imessage', 'office']
-      .map((channel) => [`${channel}RpcCall`, async () => ({ ok: true, value: {} })]),
-  );
-  const closed = [];
-  let renderer;
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(IMSettingsTab, {
-      ...rpcCalls,
-      emailRpcCall: async (endpoint) => {
-        closed.push(endpoint);
-        return { ok: false, error: { code: 'email-channel-disabled', message: 'Email is not available yet.' } };
-      },
-    }));
-  });
-  const labels = () => renderer.root
-    .findAll((node) => node.type === 'button')
-    .map((node) => textOf(node.children));
-  // The rail button renders the label and its note together.
-  const hasMailbox = () => labels().some((label) => label.startsWith('邮箱'));
-  assert.equal(hasMailbox(), false,
-    'a closed channel exposes no mailbox entry point');
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(IMSettingsTab, {
-      ...rpcCalls,
-      emailRpcCall: async () => ({ ok: true, value: { enabled: false } }),
-    }));
-  });
-  assert.equal(hasMailbox(), false,
-    'an explicit closed answer also hides the entry point');
-  const { registerManagementRpc } = await import('../plugin-src/management-rpc.mjs');
-  const { managementFetch } = await import('./fixtures/management-rpc.mjs');
-  let emailRpcCall;
-  registerManagementRpc({
-    connection: { fetch: managementFetch((_channel, handler) => { emailRpcCall = handler; }) },
-  }, '/email', async (endpoint) => {
-    assert.equal(endpoint, 'channel.availability');
-    return { ok: true, value: { enabled: true } };
-  });
-  await TestRenderer.act(async () => {
-    renderer = TestRenderer.create(React.createElement(IMSettingsTab, {
-      ...rpcCalls,
-      emailRpcCall,
-    }));
-  });
-  assert.equal(hasMailbox(), true,
-    'reopening the Host switch brings the entry point back with no client change');
-  renderer.unmount();
 });

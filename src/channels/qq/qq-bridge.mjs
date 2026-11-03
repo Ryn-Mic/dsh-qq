@@ -80,6 +80,8 @@ import {
 import { withSessionBindingLock } from '../shared/session-binding-lock.mjs';
 import { t } from '../shared/i18n.mjs';
 import { isQqMessageAddressed, normalizeQqMentions } from './qq-mention.mjs';
+import { sendQqRichMessage } from './qq-rich-message.mjs';
+import { openQqReplyStream } from './qq-stream-delivery.mjs';
 
 function interactionResolvedText() {
   return t('这个问题已在其他客户端处理，无需再次回答。');
@@ -279,17 +281,22 @@ const PASSIVE_REPLY_MARGIN_MS = 30_000;
 
 function deferredQqTarget(message, target, acceptedAt) {
   const route = { scope: target.scope, targetId: target.targetId };
+  const eventId = nonEmptyString(target.eventId);
   const msgId = nonEmptyString(target.msgId);
-  if (!msgId || !PASSIVE_REPLY_WINDOW_MS[target.scope]) return route;
+  const anchor = eventId ? { eventId } : msgId ? { msgId } : null;
+  if (!anchor || !PASSIVE_REPLY_WINDOW_MS[target.scope]) return route;
   const sentAt = Date.parse(message?.timestamp ?? '');
-  return { ...route, msgId, receivedAt: Number.isFinite(sentAt) ? Math.min(sentAt, acceptedAt) : acceptedAt };
+  return { ...route, ...anchor, receivedAt: Number.isFinite(sentAt) ? Math.min(sentAt, acceptedAt) : acceptedAt };
 }
 
 export function deferredDeliveryTarget(target, now = Date.now()) {
   const route = { scope: target?.scope, targetId: target?.targetId };
   const window = PASSIVE_REPLY_WINDOW_MS[target?.scope];
-  if (!nonEmptyString(target?.msgId) || !window || !Number.isFinite(target?.receivedAt)) return route;
-  return now - target.receivedAt < window - PASSIVE_REPLY_MARGIN_MS ? { ...route, msgId: target.msgId } : route;
+  const eventId = nonEmptyString(target?.eventId);
+  const msgId = nonEmptyString(target?.msgId);
+  const anchor = eventId ? { eventId } : msgId ? { msgId } : null;
+  if (!anchor || !window || !Number.isFinite(target?.receivedAt)) return route;
+  return now - target.receivedAt < window - PASSIVE_REPLY_MARGIN_MS ? { ...route, ...anchor } : route;
 }
 
 function nonEmptyString(value) {
@@ -479,6 +486,8 @@ export class QqHarnessBridge {
   #signal;
   #fetchImpl;
   #fileUploadTimeoutMs;
+  #streamingEnabled;
+  #streamingTimeoutMs;
   #queues = new Map();
   // Crash-recovery for #queues, started with the bridge; see recoverPendingMessages().
   #pendingRecovery = null;
@@ -508,6 +517,8 @@ export class QqHarnessBridge {
     signal,
     fetchImpl = fetch,
     fileUploadTimeoutMs = DEFAULT_FILE_UPLOAD_TIMEOUT_MS,
+    streamingEnabled = false,
+    streamingTimeoutMs = 30_000,
   }) {
     if (!bot || typeof bot.sendText !== 'function') throw new TypeError('QQ bot client is required');
     if (!ownerUserOpenid) throw new TypeError('QQ scanner identity is required');
@@ -515,6 +526,10 @@ export class QqHarnessBridge {
     if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl must be a function');
     if (!Number.isInteger(fileUploadTimeoutMs) || fileUploadTimeoutMs < 1) {
       throw new TypeError('fileUploadTimeoutMs must be a positive integer');
+    }
+    if (typeof streamingEnabled !== 'boolean') throw new TypeError('streamingEnabled must be a boolean');
+    if (!Number.isInteger(streamingTimeoutMs) || streamingTimeoutMs < 1 || streamingTimeoutMs > 120_000) {
+      throw new TypeError('streamingTimeoutMs must be an integer between 1 and 120000');
     }
     this.#bot = bot;
     this.#ownerUserOpenid = ownerUserOpenid;
@@ -533,6 +548,8 @@ export class QqHarnessBridge {
     });
     this.#fetchImpl = fetchImpl;
     this.#fileUploadTimeoutMs = Math.min(fileUploadTimeoutMs, DEFAULT_FILE_UPLOAD_TIMEOUT_MS);
+    this.#streamingEnabled = streamingEnabled;
+    this.#streamingTimeoutMs = streamingTimeoutMs;
     this.#approvals = new HarnessApprovalQueue({ label: 'qq', logger });
     // A queued message lives only in #queues. If the process dies before its
     // turn runs the user has already been told it is queued, so the persisted
@@ -542,6 +559,20 @@ export class QqHarnessBridge {
 
   get status() {
     return structuredClone(this.#status);
+  }
+
+  setStreamingEnabled(enabled) {
+    if (typeof enabled !== 'boolean') throw new TypeError('streamingEnabled must be a boolean');
+    this.#streamingEnabled = enabled;
+  }
+
+  validateMenuInteraction({ route, actor, token, number }) {
+    return this.#menus.inspect(route, actor, number, token, this.#menuContext(route));
+  }
+
+  sendRich(target, payload, { signal, timeoutMs = this.#fileUploadTimeoutMs } = {}) {
+    const deliverySignal = signal && this.#signal ? AbortSignal.any([signal, this.#signal]) : signal ?? this.#signal;
+    return sendQqRichMessage(this.#bot, target, payload, { signal: deliverySignal, timeoutMs });
   }
 
   accept(message) {
@@ -921,12 +952,12 @@ export class QqHarnessBridge {
   async #deliverDeferredOutcome(entry, outcome) {
     const text = deferredOutcomeText(outcome);
     const target = deferredDeliveryTarget(entry.target);
-    if (!target.msgId) {
+    if (!target.msgId && !target.eventId) {
       await sendMarkdownReply(this.#bot, target, text, { logger: this.#logger });
       return true;
     }
     try {
-      // The timeout notice already answered this msg_id once.
+      // The timeout notice already answered this passive message/event once.
       await sendMarkdownReply(this.#bot, target, text, { logger: this.#logger, passiveRepliesUsed: 1 });
     } catch (error) {
       // Nothing was sent and QQ definitely refused the passive reply (window
@@ -948,20 +979,32 @@ export class QqHarnessBridge {
   async #showMenu(message, key, name, pageView = null) {
     const actor = message.senderId;
     const context = this.#menuContext(key);
-    const entry = this.#menus.begin(key, actor, context);
-    const view = pageView ?? await qqMenuView(name, this.#harness, this.#state, key, {
-      signal: this.#signal, busy: this.#queues.has(key)
-        || this.#pendingInteractions.has(key) || this.#approvals.hasPending(key),
-    });
-    this.#signal?.throwIfAborted();
-    this.#harness.assertWorkspaceScope?.();
-    const current = this.#menuContext(key);
-    if (current.workspace !== context.workspace || current.sessionWorkspace !== context.sessionWorkspace
-      || current.sessionId !== context.sessionId) {
-      return { message: t('会话或工作区已变化，请重新发送 /m。') };
+    // Reserve request order before any asynchronous reads. A slow catalog must
+    // not take digits back after a newer card or an ordinary message.
+    const entry = this.#menus.stage(key, actor, context);
+    let view;
+    try {
+      view = pageView ?? await qqMenuView(name, this.#harness, this.#state, key, {
+        signal: this.#signal, busy: this.#queues.has(key)
+          || this.#pendingInteractions.has(key) || this.#approvals.hasPending(key),
+      });
+      this.#signal?.throwIfAborted();
+      this.#harness.assertWorkspaceScope?.();
+      const current = this.#menuContext(key);
+      if (current.workspace !== context.workspace || current.sessionWorkspace !== context.sessionWorkspace
+        || current.sessionId !== context.sessionId) {
+        this.#menus.discard(key, actor, entry);
+        return { message: t('会话或工作区已变化，请重新发送 /m。') };
+      }
+    } catch (error) {
+      this.#menus.discard(key, actor, entry);
+      throw error;
     }
     if (!this.#menus.publish(key, actor, entry, view)) return { messages: [] };
+    // Register before sending: QQ can dispatch a button callback before its
+    // message HTTP response arrives. Only confirmed delivery changes digits.
     await sendQqMenu(this.#bot, message.replyTarget, view, entry.token, { logger: this.#logger });
+    this.#menus.activate(key, actor, entry);
     this.#status.messagesReplied += 1;
     this.#status.lastReplyAt = new Date().toISOString();
     return { messages: [] };
@@ -1296,8 +1339,14 @@ export class QqHarnessBridge {
         }));
         contextEnhanced = content !== originalContent;
       }
-      // QQ stream_messages can acknowledge a final frame without rendering it in
-      // some C2C clients. Standard Markdown delivery is the reliable reply path.
+      // Some C2C clients fail to render SDK streams. Keep final Markdown as the
+      // default; the explicit switch is sampled once for this model turn.
+      stream = await openQqReplyStream(this.#bot, target, {
+        enabled: this.#streamingEnabled,
+        signal: this.#signal,
+        timeoutMs: this.#streamingTimeoutMs,
+        logger: this.#logger,
+      });
       const toolErrors = [];
       let answer;
       let artifacts = [];
@@ -1339,7 +1388,10 @@ export class QqHarnessBridge {
             control: { owner: this, key },
             progressMode: 'all',
             finalAnswerOnly: true,
-            onUpdate: (update) => {
+            onUpdate: async (update) => {
+              if (update.type === 'text' && typeof update.text === 'string') {
+                await stream?.updateProgress(update.text);
+              }
               if (update.error) {
                 const name = (nonEmptyString(update.toolName) ?? t('工具'))
                   .replace(/[\r\n]+/gu, ' ')
@@ -1381,27 +1433,22 @@ export class QqHarnessBridge {
       try {
         let streamFinished = false;
         if (stream) {
-          try {
-            await stream.update(displayAnswer);
+          const result = await stream.finish(displayAnswer);
+          if (!result.fallback) {
             streamFinished = true;
             textReceipt = createDeliveryReceipt({
               deliveryId: messageId,
               presentation: 'qq-text',
-              providerMessageIds: providerMessageIdsFor(stream),
+              providerMessageIds: providerMessageIdsFor(result.response),
             });
-            try {
-              await stream.complete();
-            } catch (error) {
-              this.#logger.warn?.('[dsh-im:qq] QQ stream completion failed after visible final content:', error);
-            }
-          } catch (error) {
-            stream.cancel?.();
-            this.#logger.warn?.('[dsh-im:qq] QQ stream update failed; using markdown fallback:', error);
+          } else {
+            this.#logger.warn?.('[dsh-im:qq] QQ stream was explicitly rejected; using final Markdown fallback');
           }
         }
         if (!streamFinished) {
           const deliveries = await sendMarkdownReply(this.#bot, target, displayAnswer, {
             logger: this.#logger,
+            signal: this.#signal,
           });
           textReceipt = createDeliveryReceipt({
             deliveryId: messageId,

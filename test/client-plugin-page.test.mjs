@@ -8,7 +8,7 @@ import { IM_MAIN_PANEL_ID, installImPluginPage } from '../plugin-src/client/plug
 import { apply as applyClient } from '../plugin-src/client/index.js';
 
 const { act, create } = TestRenderer;
-const packageName = '@xmanrui/dsh-im';
+const packageName = '@ryn-mic/dsh-qq';
 const bundle = { kind: 'bundle', pkg: { name: packageName } };
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -86,7 +86,7 @@ async function start(t, { ready = true, sidebarVisible = true } = {}) {
     },
     element(name, props = {}, language = 'zh') {
       const { options, component } = slots.entries.get(name);
-      assert.equal(options.locale, 'dsh-im');
+      assert.equal(options.locale, 'dsh-qq');
       return React.createElement(component, {
         ...options.inject?.(), ...props,
         t: (key) => language === 'en' ? en[key] : key,
@@ -103,11 +103,11 @@ test('localized detail action opens the shared IM panel without a back button', 
   let renderer;
   t.after(() => act(() => renderer?.unmount()));
   act(() => { renderer = create(host.element('plugins.detail.actions', { subject: bundle })); });
-  assert.deepEqual(renderer.root.findByType('button').children, ['打开 IM机器人']);
+  assert.deepEqual(renderer.root.findByType('button').children, ['打开 QQ机器人']);
   act(() => renderer.update(host.element('plugins.detail.actions', { subject: bundle }, 'en')));
   const open = renderer.root.findByType('button');
   assert.equal(open.props.type, 'button');
-  assert.deepEqual(open.children, ['Open IM bots']);
+  assert.deepEqual(open.children, ['Open QQ bot']);
   act(() => open.props.onClick());
   assert.deepEqual(host.selected, [IM_MAIN_PANEL_ID]);
   act(() => renderer.update(host.element('main', {}, 'en')));
@@ -170,7 +170,7 @@ test('sidebar opens the existing main panel with a regular-weight linked-bubble 
   await host.provideNavigation();
   const { options } = host.slots.entries.get('sidebar.panellist');
   assert.equal(options.id, host.slots.entries.get('main').options.key);
-  assert.equal(options.label(), 'IM机器人');
+  assert.equal(options.label(), 'QQ机器人');
   assert.ok(host.slots.entries.has('plugins.detail.actions'));
   let renderer;
   t.after(() => act(() => renderer?.unmount()));

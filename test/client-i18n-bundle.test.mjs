@@ -15,7 +15,7 @@ test('the published client registers the complete Russian pack and renders each 
   const require = createRequire(import.meta.url);
   runInNewContext(await readFile(new URL('../lib/client.js', import.meta.url), 'utf8'), {
     window: { __ModuleLoader__: { load({ id, factory }) {
-      assert.equal(id, '@xmanrui/dsh-im');
+      assert.equal(id, '@ryn-mic/dsh-qq');
       client = factory(require);
     } } },
     AbortController, setTimeout, clearTimeout, console,
@@ -35,7 +35,7 @@ test('the published client registers the complete Russian pack and renders each 
       return () => languages.delete(definition.id);
     },
     register(namespace, idOrDictionaries, dictionary) {
-      assert.equal(namespace, 'dsh-im');
+      assert.equal(namespace, 'dsh-qq');
       const entries = typeof idOrDictionaries === 'string'
         ? [[idOrDictionaries, dictionary]] : Object.entries(idOrDictionaries);
       for (const [id, value] of entries) {
@@ -77,9 +77,9 @@ test('the published client registers the complete Russian pack and renders each 
   assert.equal(locale.bind()('绑定 DS Bot'), 'Привязать DS Bot');
   assert.equal(locale.bind()('机器人群聊行为'), 'Поведение бота в группах');
   for (const [id, label, loading] of [
-    ['ru', 'IM-боты', 'Загружаем настройки боковой панели…'],
-    ['en', 'IM bots', en['正在读取侧边栏设置…']],
-    ['zh', 'IM机器人', '正在读取侧边栏设置…'],
+    ['ru', 'Бот QQ', 'Загружаем настройки боковой панели…'],
+    ['en', 'QQ bot', en['正在读取侧边栏设置…']],
+    ['zh', 'QQ机器人', '正在读取侧边栏设置…'],
   ]) {
     active = id;
     assert.equal(slots.get('settings.section').options.label(), label);

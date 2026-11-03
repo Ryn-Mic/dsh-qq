@@ -1,3 +1,4 @@
+import { QQ_ENDPOINTS } from '../plugin-src/client/channels/qq/api.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -15,24 +16,12 @@ import {
   DELIVERY_ENDPOINTS,
   DELIVERY_RPC_CHANNEL,
   DeliveryTargetSettingsPage,
-  FEISHU_BOT_SETTINGS_TABS,
   botSettingsTabsForChannel,
 } from '../plugin-src/client/delivery-settings.js';
 import { en, setImTranslator } from '../plugin-src/client/i18n.js';
-import { FEISHU_ENDPOINTS } from '../plugin-src/client/channels/feishu/api.js';
-import { BotCard as FeishuBotCard } from '../plugin-src/client/channels/feishu/index.js';
-import { AccountCard as WeixinAccountCard } from '../plugin-src/client/channels/weixin/index.js';
-import { AccountCard as DingtalkAccountCard } from '../plugin-src/client/channels/dingtalk/index.js';
-import { AccountCard as WecomAccountCard } from '../plugin-src/client/channels/wecom/index.js';
 import { AccountCard as QqAccountCard } from '../plugin-src/client/channels/qq/index.js';
-import { SlackAccountCard } from '../plugin-src/client/channels/slack/index.js';
-import { TelegramAccountCard } from '../plugin-src/client/channels/telegram/index.js';
-import { DiscordAccountCard } from '../plugin-src/client/channels/discord/index.js';
-import { WhatsappAccountCard } from '../plugin-src/client/channels/whatsapp/index.js';
-import { IMessageAccountCard } from '../plugin-src/client/channels/imessage/index.js';
 import { IMSettingsTab } from '../plugin-src/client/index.js';
 import { BotSettingsContext } from '../plugin-src/client/channel-card-meta.js';
-import { AccountCard as WecomAppAccountCard } from '../plugin-src/client/channels/wecom-app/index.js';
 
 const { act, create } = TestRenderer;
 
@@ -89,7 +78,7 @@ async function mount(t, props) {
 }
 
 const connectedAccount = Object.freeze({
-  botId: 'bot_feishu_01',
+  botId: 'bot_qq_01',
   botName: '通知机器人',
   connected: true,
   accessPolicy: Object.freeze({
@@ -112,50 +101,14 @@ const connectedAccount = Object.freeze({
   }),
 });
 
-test('delivery settings define the supported IM and email channel routes', () => {
-  assert.deepEqual(BOT_SETTINGS_TABS, [
-    { id: 'general', label: '通用' },
-    { id: 'delivery', label: '投递设置' },
-    { id: 'ds-bot', label: '绑定 DS Bot' },
-    { id: 'access', label: '访问设置' },
-  ]);
-  assert.deepEqual(FEISHU_BOT_SETTINGS_TABS, [
-    { id: 'general', label: '通用' },
-    { id: 'delivery', label: '投递设置' },
-    { id: 'ds-bot', label: '绑定 DS Bot' },
-    { id: 'access', label: '访问设置' },
-    { id: 'conversation-directory', label: '会话目录' },
-    { id: 'group', label: '群聊' },
-    { id: 'slash', label: '指令面板' },
-    { id: 'voice', label: '语音交互' },
-  ]);
-  assert.equal(botSettingsTabsForChannel('weixin'), BOT_SETTINGS_TABS);
-  assert.equal(botSettingsTabsForChannel('dingtalk'), BOT_SETTINGS_TABS);
-  assert.equal(botSettingsTabsForChannel('feishu'), FEISHU_BOT_SETTINGS_TABS);
+test('delivery settings retain QQ routes and the shared bot management tabs', () => {
+  assert.deepEqual(BOT_SETTINGS_TABS.map(({ id }) => id), ['general', 'delivery', 'ds-bot', 'access']);
+  assert.equal(botSettingsTabsForChannel('qq'), BOT_SETTINGS_TABS);
   assert.equal(DELIVERY_RPC_CHANNEL, '/dsh-im-delivery');
-  assert.deepEqual(Object.keys(DELIVERY_CHANNEL_DEFINITIONS), [
-    'weixin', 'feishu', 'dingtalk', 'wecom', 'wecomApp', 'qq',
-    'slack', 'telegram', 'discord', 'whatsapp', 'imessage', 'email',
-  ]);
-  assert.deepEqual(
-    DELIVERY_CHANNEL_DEFINITIONS.feishu.fields.user.map((field) => field.key),
-    ['openId'],
-  );
-  assert.deepEqual(
-    DELIVERY_CHANNEL_DEFINITIONS.dingtalk.fields.group.map((field) => field.key),
-    ['openConversationId'],
-  );
-  assert.deepEqual(
-    DELIVERY_CHANNEL_DEFINITIONS.telegram.fields.topic.map((field) => field.key),
-    ['chatId', 'messageThreadId'],
-  );
-  assert.equal('office' in DELIVERY_CHANNEL_DEFINITIONS, false);
-  // 邮箱使用独立的发件人设置，不在共享访问策略表单中。
-  assert.deepEqual(
-    Object.keys(ACCESS_CHANNEL_DEFINITIONS),
-    Object.keys(DELIVERY_CHANNEL_DEFINITIONS).filter((channel) => channel !== 'email'),
-  );
-  assert.equal(ACCESS_CHANNEL_DEFINITIONS.weixin.groupSupported, false);
+  assert.deepEqual(Object.keys(DELIVERY_CHANNEL_DEFINITIONS), ['qq']);
+  assert.deepEqual(DELIVERY_CHANNEL_DEFINITIONS.qq.fields.user.map(({ key }) => key), ['userOpenId']);
+  assert.deepEqual(DELIVERY_CHANNEL_DEFINITIONS.qq.fields.group.map(({ key }) => key), ['groupOpenId']);
+  assert.equal(ACCESS_CHANNEL_DEFINITIONS.qq.groupSupported !== false, true);
 });
 
 test('robot card settings toggle expands in place and more settings preserves the bot scope', () => {
@@ -175,17 +128,7 @@ test('robot card settings toggle expands in place and more settings preserves th
     workspace: null,
   };
   const cards = [
-    ['feishu', FeishuBotCard, { connection: account }],
-    ['weixin', WeixinAccountCard, { account }],
-    ['dingtalk', DingtalkAccountCard, { account }],
-    ['wecom', WecomAccountCard, { account }],
-    ['wecomApp', WecomAppAccountCard, { account }],
     ['qq', QqAccountCard, { account }],
-    ['slack', SlackAccountCard, { account }],
-    ['telegram', TelegramAccountCard, { account }],
-    ['discord', DiscordAccountCard, { account }],
-    ['whatsapp', WhatsappAccountCard, { account }],
-    ['imessage', IMessageAccountCard, { account }],
   ];
 
   for (const [channel, Card, props] of cards) {
@@ -240,11 +183,11 @@ test('expanded card more settings opens a bot-scoped page and returns in place',
     cancelAnimationFrame() {},
   };
   const bot = {
-    botId: 'wx_stable_bot',
+    botId: 'qq_stable_bot',
     connected: true,
     configured: true,
     state: 'connected',
-    bot: { name: '微信通知助手', accountIdMasked: 'wx••01' },
+    bot: { name: 'QQ通知助手', accountIdMasked: 'wx••01' },
     health: { status: 'healthy', summary: '微信连接正常', lastCheckedAt: Date.now() },
     accessPolicy: connectedAccount.accessPolicy,
   };
@@ -254,7 +197,7 @@ test('expanded card more settings opens a bot-scoped page and returns in place',
     await act(async () => {
       mounted = create(React.createElement(IMSettingsTab, {
         browserLocation: { href: 'http://localhost:9527/settings' },
-        weixinRpcCall: async (endpoint) => {
+        qqRpcCall: async (endpoint) => {
           assert.equal(endpoint, 'connection.status');
           return { ok: true, value: { revision: 1, bots: [bot] } };
         },
@@ -277,14 +220,14 @@ test('expanded card more settings opens a bot-scoped page and returns in place',
     else globalThis.window = previousWindow;
   });
 
-  const card = renderer.root.findByProps({ 'data-bot-id': 'wx_stable_bot' });
+  const card = renderer.root.findByProps({ 'data-bot-id': 'qq_stable_bot' });
   act(() => card.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} }));
   await act(async () => {
     card.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
     await flush();
   });
   const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  assert.match(page.props['aria-label'], /微信通知助手/);
+  assert.match(page.props['aria-label'], /QQ通知助手/);
   assert.doesNotMatch(textOf(page), /调用标识/);
   assert.equal(
     page.findByProps({ className: 'dim-deliveryHeader' }).findAllByType('h2').length,
@@ -313,224 +256,44 @@ test('expanded card more settings opens a bot-scoped page and returns in place',
   assert.equal(page.findByProps({ className: 'dim-botSettingsTabsBar' }).findAllByType('a').length, 0);
   assert.equal(
     textOf(identity.findByType('h2')),
-    '微信通知助手',
+    'QQ通知助手',
   );
   const docsLink = identity.findByProps({ className: 'dim-deliveryDocsLink' });
   assert.equal(textOf(docsLink), '使用文档↗');
   assert.equal(
     docsLink.props.href,
-    'https://github.com/xmanrui/dsh-im/blob/main/PROACTIVE_DELIVERY.md',
+    'https://github.com/Ryn-Mic/dsh-qq/blob/main/PROACTIVE_DELIVERY.md',
   );
   assert.equal(docsLink.props.target, '_blank');
   assert.equal(docsLink.props.rel, 'noopener noreferrer');
-  assert.equal(page.findByType('code').props.children, 'wx_stable_bot');
+  assert.equal(page.findByType('code').props.children, 'qq_stable_bot');
   assert.deepEqual(deliveryCalls, [{
     endpoint: DELIVERY_ENDPOINTS.list,
-    payload: { botId: 'wx_stable_bot' },
+    payload: { botId: 'qq_stable_bot' },
   }]);
 
   await act(async () => {
     button(page, '← 返回机器人列表').props.onClick();
     await flush();
   });
-  assert.ok(renderer.root.findByProps({ 'data-bot-id': 'wx_stable_bot' }));
-  assert.equal(renderer.root.findByProps({ id: 'dim-tab-weixin' }).props['aria-selected'], true);
+  assert.ok(renderer.root.findByProps({ 'data-bot-id': 'qq_stable_bot' }));
+  assert.equal(renderer.root.findByProps({ id: 'dim-tab-qq' }).props['aria-selected'], true);
 });
 
-test('Feishu more settings has separate group and voice tabs, with only group controls in the group tab', async (t) => {
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval() { return 1; },
-    clearInterval() {},
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) { callback(); return 1; },
-    cancelAnimationFrame() {},
-  };
-  t.after(() => {
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
 
-  const bot = {
-    botId: 'feishu_group_settings',
-    connected: true,
-    configured: true,
-    state: 'connected',
-    groupResponseMode: 'all',
-    mentionTopicReply: true,
-    groupMessagePermissionGranted: true,
-    bot: { name: '群聊设置机器人', appIdMasked: 'cli_group••••test' },
-    health: { status: 'healthy', summary: '长连接运行正常', lastCheckedAt: Date.now() },
-  };
-  const status = { schemaVersion: 2, revision: 1, state: 'connected', bots: [bot] };
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(IMSettingsTab, {
-      browserLocation: { href: 'http://localhost:9527/settings' },
-      weixinRpcCall: async () => ({ ok: true, value: { revision: 1, bots: [] } }),
-      feishuRpcCall: async (endpoint) => {
-        assert.equal(endpoint, FEISHU_ENDPOINTS.status);
-        return { ok: true, value: status };
-      },
-      deliveryRpcCall: async () => ({ ok: true, value: { targets: [] } }),
-      updateRpcCall: async () => ({
-        ok: true,
-        value: { runningVersion: '4.0.1', canInstall: false },
-      }),
-    }));
-    await flush();
-  });
-  t.after(async () => {
-    await act(async () => { renderer.unmount(); await flush(); });
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
 
-  await act(async () => {
-    renderer.root.findByProps({ id: 'dim-tab-feishu' }).props.onClick();
-    await flush();
-    await flush();
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} });
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
-    await flush();
-  });
-
-  const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  assert.deepEqual(page.findAllByProps({ role: 'tab' }).map(textOf), [
-    '通用', '投递设置', '绑定 DS Bot', '访问设置', '会话目录', '群聊', '指令面板', '语音交互',
-  ]);
-  await act(async () => {
-    button(page, '群聊').props.onClick();
-    await flush();
-  });
-
-  const groupSettings = renderer.root.findByProps({ className: 'dim-feishuGroupSettings' });
-  assert.equal(groupSettings.findAllByProps({ className: 'dim-feishuGroupControl' }).length, 2);
-  assert.equal(groupSettings.findAllByType('h2').length, 0);
-  assert.doesNotMatch(textOf(groupSettings), /这些设置只影响|刷新群聊设置/);
-  assert.equal(groupSettings.findByProps({ 'aria-label': '群聊响应方式' }).props.value, 'all');
-  assert.equal(groupSettings.findByProps({ 'aria-label': '被 @ 时以话题方式回复' }).props.value, 'on');
-});
-
-test('voice tab loads and saves the selected bot, preserves advanced options, and reloads after switching tabs', async (t) => {
-  let voice = {
-    enabled: true,
-    secretRef: 'BOT_DASHSCOPE_KEY',
-    asrModel: 'qwen3-asr-flash',
-    ttsModel: 'qwen3-tts-flash',
-    ttsVoice: 'Serena',
-    asrBaseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    ffmpeg: '/opt/homebrew/bin/ffmpeg',
-  };
-  const initialVoice = { ...voice };
-  const calls = [];
-  const renderer = await mount(t, {
-    channel: 'feishu',
-    account: connectedAccount,
-    rpcCall: async () => ({ ok: true, value: { targets: [] } }),
-    accessRpcCall: async (endpoint, payload) => {
-      calls.push({ endpoint, payload });
-      if (endpoint === FEISHU_ENDPOINTS.setVoice) voice = payload.voice;
-      else assert.equal(endpoint, FEISHU_ENDPOINTS.status);
-      return { ok: true, value: { bots: [
-        { botId: 'other_bot', voice: null },
-        { botId: connectedAccount.botId, voice },
-      ] } };
-    },
-    onBack() {},
-  });
-  const switchTab = async (label) => act(async () => {
-    button(renderer.root, label).props.onClick();
-    await flush();
-  });
-  const voiceInput = () => renderer.root.findByProps({ placeholder: 'Momo' });
-
-  assert.deepEqual(calls, [{ endpoint: FEISHU_ENDPOINTS.status, payload: {} }]);
-  await switchTab('语音交互');
-  assert.equal(renderer.root.findByProps({ 'aria-label': '语音交互开关' }).props.value, 'on');
-  assert.equal(renderer.root.findByProps({ placeholder: 'DASHSCOPE_API_KEY' }).props.value, 'BOT_DASHSCOPE_KEY');
-  assert.equal(voiceInput().props.value, 'Serena');
-  await act(async () => voiceInput().props.onChange({ target: { value: 'Cherry' } }));
-  await act(async () => {
-    button(renderer.root, '保存语音设置').props.onClick();
-    await flush();
-  });
-  assert.deepEqual(calls.at(-1), {
-    endpoint: FEISHU_ENDPOINTS.setVoice,
-    payload: { botId: connectedAccount.botId, voice: { ...initialVoice, ttsVoice: 'Cherry' } },
-  });
-
-  await switchTab('投递设置');
-  assert.equal(renderer.root.findAllByProps({ 'aria-label': '语音交互开关' }).length, 0);
-  await switchTab('语音交互');
-  assert.equal(calls.filter(({ endpoint }) => endpoint === FEISHU_ENDPOINTS.status).length, 3);
-  assert.equal(voiceInput().props.value, 'Cherry');
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '语音交互开关' }).props.onChange({ target: { value: 'off' } });
-    await flush();
-  });
-  assert.deepEqual(calls.at(-1), {
-    endpoint: FEISHU_ENDPOINTS.setVoice,
-    payload: { botId: connectedAccount.botId, voice: null },
-  });
-  await switchTab('投递设置');
-  await switchTab('语音交互');
-  assert.equal(renderer.root.findByProps({ 'aria-label': '语音交互开关' }).props.value, 'off');
-});
-
-test('voice tab offers a retry when the current bot is missing and shows save failures', async (t) => {
-  let available = false;
-  const renderer = await mount(t, {
-    channel: 'feishu',
-    account: connectedAccount,
-    rpcCall: async () => ({ ok: true, value: { targets: [] } }),
-    accessRpcCall: async (endpoint) => {
-      if (endpoint === FEISHU_ENDPOINTS.setVoice) {
-        return { ok: false, error: { message: '语音设置保存失败，请重试。' } };
-      }
-      assert.equal(endpoint, FEISHU_ENDPOINTS.status);
-      return { ok: true, value: { bots: available ? [{ botId: connectedAccount.botId }] : [] } };
-    },
-    onBack() {},
-  });
-  await act(async () => {
-    button(renderer.root, '语音交互').props.onClick();
-    await flush();
-  });
-  assert.match(textOf(renderer.root.findByProps({ role: 'alert' })), /未找到当前飞书机器人/);
-  assert.equal(renderer.root.findAllByProps({ 'aria-label': '语音交互开关' }).length, 0);
-  available = true;
-  await act(async () => {
-    button(renderer.root, '重新读取').props.onClick();
-    await flush();
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '语音交互开关' }).props.onChange({ target: { value: 'on' } });
-  });
-  await act(async () => {
-    button(renderer.root, '保存语音设置').props.onClick();
-    await flush();
-  });
-  assert.equal(textOf(renderer.root.findByProps({ role: 'alert' })), '语音设置保存失败，请重试。');
-  assert.equal(button(renderer.root, '保存语音设置').props.disabled, false);
-});
 
 test('access settings preserve independent mode drafts and save direct and group atomically', async (t) => {
   const calls = [];
   const renderer = await mount(t, {
-    channel: 'feishu',
+    channel: 'qq',
     account: connectedAccount,
     rpcCall: async (endpoint) => {
       assert.equal(endpoint, DELIVERY_ENDPOINTS.list);
       return { ok: true, value: { targets: [] } };
     },
     accessRpcCall: async (endpoint, payload) => {
-      if (endpoint === FEISHU_ENDPOINTS.status) {
+      if (endpoint === QQ_ENDPOINTS.status) {
         return { ok: true, value: { bots: [connectedAccount] } };
       }
       calls.push({ endpoint, payload });
@@ -549,7 +312,7 @@ test('access settings preserve independent mode drafts and save direct and group
   });
 
   // Common settings plus Feishu-specific tabs.
-  assert.equal(renderer.root.findAllByProps({ role: 'tab' }).length, 8);
+  assert.equal(renderer.root.findAllByProps({ role: 'tab' }).length, 4);
   assert.equal(renderer.root.findAllByProps({ className: 'dim-accessScene' }).length, 2);
   assert.equal(renderer.root.findAllByProps({ className: 'dim-accessOwnerNotice' }).length, 0);
   assert.equal(accessHelpButtons(renderer.root).length, 2);
@@ -566,7 +329,7 @@ test('access settings preserve independent mode drafts and save direct and group
     assert.equal(accessHelpButton.props['aria-describedby'], accessHelpTooltip.props.id);
     assert.match(textOf(accessHelpTooltip), /已由接入流程确认的所有者可以访问并执行命令/);
     assert.match(textOf(accessHelpTooltip), /未识别到所有者身份时，按本页访问设置执行/);
-    assert.match(textOf(accessHelpTooltip), /不是机器人的 Open ID/);
+    assert.doesNotMatch(textOf(accessHelpTooltip), /飞书|WeChat|Telegram/);
   }
   assert.equal(accessHelpButtons(renderer.root.findByProps({ className: 'dim-accessActions' })).length, 0);
   assert.equal(accessHelpButtons(renderer.root.findByProps({ role: 'tablist' })).length, 0);
@@ -584,7 +347,7 @@ test('access settings preserve independent mode drafts and save direct and group
     await flush();
   });
   await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '私聊 飞书 Open ID 1' }).props.onChange({
+    renderer.root.findByProps({ 'aria-label': '私聊 QQ User Open ID 1' }).props.onChange({
       target: { value: '  ou_override  ' },
     });
     renderer.root.findByProps({ 'aria-label': '群聊 默认命令权限' }).props.onChange({
@@ -644,7 +407,7 @@ test('access settings preserve independent mode drafts and save direct and group
     await flush();
   });
   await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '私聊 飞书 Open ID 1' }).props.onChange({
+    renderer.root.findByProps({ 'aria-label': '私聊 QQ User Open ID 1' }).props.onChange({
       target: { value: '  ou_allowed  ' },
     });
     await flush();
@@ -663,7 +426,7 @@ test('access settings preserve independent mode drafts and save direct and group
     await flush();
   });
   assert.equal(
-    renderer.root.findByProps({ 'aria-label': '私聊 飞书 Open ID 1' }).props.value,
+    renderer.root.findByProps({ 'aria-label': '私聊 QQ User Open ID 1' }).props.value,
     '  ou_override  ',
   );
   assert.equal(
@@ -682,7 +445,7 @@ test('access settings preserve independent mode drafts and save direct and group
     await flush();
   });
   assert.equal(
-    renderer.root.findByProps({ 'aria-label': '私聊 飞书 Open ID 1' }).props.value,
+    renderer.root.findByProps({ 'aria-label': '私聊 QQ User Open ID 1' }).props.value,
     '  ou_allowed  ',
   );
   assert.equal(
@@ -737,7 +500,7 @@ test('access settings preserve independent mode drafts and save direct and group
 
 test('access settings keep a failed atomic save visible as an error', async (t) => {
   const renderer = await mount(t, {
-    channel: 'feishu',
+    channel: 'qq',
     account: connectedAccount,
     rpcCall: async () => ({ ok: true, value: { targets: [] } }),
     accessRpcCall: async () => ({
@@ -764,32 +527,11 @@ test('access settings keep a failed atomic save visible as an error', async (t) 
   assert.equal(feedback.props.role, 'alert');
 });
 
-test('WeChat keeps the shared access page but disables its unsupported group section', async (t) => {
-  const renderer = await mount(t, {
-    channel: 'weixin',
-    account: { ...connectedAccount, botId: 'wx_access_01' },
-    rpcCall: async () => ({ ok: true, value: { targets: [] } }),
-    accessRpcCall: async () => {
-      throw new Error('save should not run in this rendering test');
-    },
-    onBack() {},
-  });
-  await act(async () => {
-    button(renderer.root, '访问设置').props.onClick();
-    await flush();
-  });
-
-  const group = renderer.root.findByProps({ 'data-scene': 'group' });
-  assert.equal(group.props.disabled, true);
-  assert.match(textOf(group), /当前渠道不支持群聊/);
-  assert.equal(group.findAllByType('select').length, 0);
-  assert.ok(renderer.root.findByProps({ 'data-scene': 'direct' }));
-});
 
 test('new target waits for saved targets before generating aliases or checking duplicates', async (t) => {
   const pending = deferred();
   const renderer = await mount(t, {
-    channel: 'feishu',
+    channel: 'qq',
     account: connectedAccount,
     rpcCall: async (endpoint) => {
       assert.equal(endpoint, DELIVERY_ENDPOINTS.list);
@@ -812,8 +554,8 @@ test('each saved target tests only its own botId and targetId and keeps row-loca
   const pending = deferred();
   const calls = [];
   const targets = [
-    { targetId: 'daily-report', name: '日报群', kind: 'group', route: { chatId: 'oc_daily' } },
-    { targetId: 'oncall', name: '值班同学', kind: 'user', route: { openId: 'ou_oncall' } },
+    { targetId: 'daily-report', name: '日报群', kind: 'group', route: { groupOpenId: 'oc_daily' } },
+    { targetId: 'oncall', name: '值班同学', kind: 'user', route: { userOpenId: 'ou_oncall' } },
   ];
   const rpcCall = async (endpoint, payload) => {
     calls.push({ endpoint, payload });
@@ -822,7 +564,7 @@ test('each saved target tests only its own botId and targetId and keeps row-loca
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
   const renderer = await mount(t, {
-    channel: 'feishu', account: connectedAccount, rpcCall, onBack() {},
+    channel: 'qq', account: connectedAccount, rpcCall, onBack() {},
   });
   const first = renderer.root.findByProps({ 'data-target-id': 'daily-report' });
   const second = renderer.root.findByProps({ 'data-target-id': 'oncall' });
@@ -835,7 +577,7 @@ test('each saved target tests only its own botId and targetId and keeps row-loca
   assert.ok(second.findAllByType('button').some((entry) => textOf(entry) === '测试'));
   assert.deepEqual(calls.at(-1), {
     endpoint: DELIVERY_ENDPOINTS.test,
-    payload: { botId: 'bot_feishu_01', targetId: 'daily-report' },
+    payload: { botId: 'bot_qq_01', targetId: 'daily-report' },
   });
 
   pending.resolve({ ok: true, value: { sent: true } });
@@ -845,7 +587,7 @@ test('each saved target tests only its own botId and targetId and keeps row-loca
 
   await act(async () => {
     renderer.update(React.createElement(DeliveryTargetSettingsPage, {
-      channel: 'feishu',
+      channel: 'qq',
       account: { ...connectedAccount, connected: false },
       rpcCall,
       onBack() {},
@@ -863,13 +605,13 @@ test('saved private targets toggle Session sync while unavailable targets stay d
     targetId: 'alice',
     name: 'Alice',
     kind: 'user',
-    route: { openId: 'ou_alice' },
+    route: { userOpenId: 'ou_alice' },
     sessionSync: { enabled: false, state: 'off' },
   }, {
     targetId: 'group',
     name: '项目群',
     kind: 'group',
-    route: { chatId: 'oc_group' },
+    route: { groupOpenId: 'oc_group' },
     sessionSync: { enabled: false, state: 'unavailable' },
   }];
   const rpcCall = async (endpoint, payload) => {
@@ -886,7 +628,7 @@ test('saved private targets toggle Session sync while unavailable targets stay d
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
   const renderer = await mount(t, {
-    channel: 'feishu', account: connectedAccount, rpcCall, onBack() {},
+    channel: 'qq', account: connectedAccount, rpcCall, onBack() {},
   });
   let privateRow = renderer.root.findByProps({ 'data-target-id': 'alice' });
   const groupRow = renderer.root.findByProps({ 'data-target-id': 'group' });
@@ -903,7 +645,7 @@ test('saved private targets toggle Session sync while unavailable targets stay d
   });
   assert.deepEqual(calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.sessionSync), {
     endpoint: DELIVERY_ENDPOINTS.sessionSync,
-    payload: { botId: 'bot_feishu_01', targetId: 'alice', enabled: true },
+    payload: { botId: 'bot_qq_01', targetId: 'alice', enabled: true },
   });
   privateRow = renderer.root.findByProps({ 'data-target-id': 'alice' });
   assert.equal(privateRow.findByProps({ 'aria-label': '会话双向同步' }).props.checked, true);
@@ -916,12 +658,12 @@ test('saved private targets toggle Session sync while unavailable targets stay d
 test('new target defaults to recent conversations and selection creates an editable unsaved draft', async (t) => {
   const calls = [];
   let targets = [
-    { targetId: 'user-1', name: '值班同学', kind: 'user', route: { openId: 'ou_existing_secret_123456' } },
+    { targetId: 'user-1', name: '值班同学', kind: 'user', route: { userOpenId: 'ou_existing_secret_123456' } },
   ];
   const suggestions = [
-    { kind: 'user', route: { openId: 'ou_existing_secret_123456' } },
-    { kind: 'user', route: { openId: 'ou_new_secret_123456' } },
-    { kind: 'group', route: { chatId: 'oc_group_secret_123456' } },
+    { kind: 'user', route: { userOpenId: 'ou_existing_secret_123456' } },
+    { kind: 'user', route: { userOpenId: 'ou_new_secret_123456' } },
+    { kind: 'group', route: { groupOpenId: 'oc_group_secret_123456' } },
   ];
   const rpcCall = async (endpoint, payload) => {
     calls.push({ endpoint, payload });
@@ -941,7 +683,7 @@ test('new target defaults to recent conversations and selection creates an edita
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
   const renderer = await mount(t, {
-    channel: 'feishu', account: connectedAccount, rpcCall, onBack() {},
+    channel: 'qq', account: connectedAccount, rpcCall, onBack() {},
   });
 
   await act(async () => {
@@ -950,7 +692,7 @@ test('new target defaults to recent conversations and selection creates an edita
   });
   assert.deepEqual(calls.at(-1), {
     endpoint: DELIVERY_ENDPOINTS.listSuggestions,
-    payload: { botId: 'bot_feishu_01' },
+    payload: { botId: 'bot_qq_01' },
   });
   const picker = renderer.root.findByProps({ 'aria-label': '从已聊过的会话选择' });
   const suggestionSelect = picker.findByProps({ name: 'suggestion' });
@@ -968,12 +710,12 @@ test('new target defaults to recent conversations and selection creates an edita
   assert.match(groupTargetId, /^tgt_[0-9a-f]{16}$/);
   assert.equal(form.findByProps({ name: 'targetId' }).props.readOnly, false);
   assert.equal(form.findByProps({ name: 'kind' }).props.value, 'group');
-  assert.equal(form.findByProps({ name: 'chatId' }).props.value, 'oc_group_secret_123456');
+  assert.equal(form.findByProps({ name: 'groupOpenId' }).props.value, 'oc_group_secret_123456');
   assert.match(form.findByProps({ name: 'name' }).props.value, /^群聊 · oc_gr/);
   assert.equal(calls.some((call) => call.endpoint === DELIVERY_ENDPOINTS.create), false);
 
   await act(async () => {
-    form.findByProps({ name: 'chatId' }).props.onChange({ target: { value: 'oc_unsaved_current' } });
+    form.findByProps({ name: 'groupOpenId' }).props.onChange({ target: { value: 'oc_unsaved_current' } });
   });
   form = renderer.root.findByType('form');
   assert.ok(button(form, '测试'));
@@ -984,8 +726,8 @@ test('new target defaults to recent conversations and selection creates an edita
   assert.deepEqual(calls.at(-1), {
     endpoint: DELIVERY_ENDPOINTS.test,
     payload: {
-      botId: 'bot_feishu_01',
-      target: { kind: 'group', route: { chatId: 'oc_unsaved_current' } },
+      botId: 'bot_qq_01',
+      target: { kind: 'group', route: { groupOpenId: 'oc_unsaved_current' } },
     },
   });
   assert.equal(calls.some((call) => (
@@ -1002,9 +744,9 @@ test('new target defaults to recent conversations and selection creates an edita
   const userTargetId = form.findByProps({ name: 'targetId' }).props.value;
   assert.match(userTargetId, /^tgt_[0-9a-f]{16}$/);
   assert.notEqual(userTargetId, groupTargetId);
-  assert.match(form.findByProps({ name: 'name' }).props.value, /^私聊 · ou_ne/);
+  assert.match(form.findByProps({ name: 'name' }).props.value, /^单聊 · ou_ne/);
   assert.equal(form.findByProps({ name: 'kind' }).props.value, 'user');
-  assert.equal(form.findByProps({ name: 'openId' }).props.value, 'ou_new_secret_123456');
+  assert.equal(form.findByProps({ name: 'userOpenId' }).props.value, 'ou_new_secret_123456');
   const fallbackName = form.findByProps({ name: 'name' }).props.value;
 
   await act(async () => {
@@ -1017,12 +759,12 @@ test('new target defaults to recent conversations and selection creates an edita
   assert.deepEqual(calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.create), {
     endpoint: DELIVERY_ENDPOINTS.create,
     payload: {
-      botId: 'bot_feishu_01',
+      botId: 'bot_qq_01',
       target: {
         targetId: 'project-chat',
         name: fallbackName,
         kind: 'user',
-        route: { openId: 'ou_new_secret_123456' },
+        route: { userOpenId: 'ou_new_secret_123456' },
       },
     },
   });
@@ -1039,7 +781,7 @@ test('recent conversation picker explains the empty state and refreshes on deman
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
   const renderer = await mount(t, {
-    channel: 'telegram', account: connectedAccount, rpcCall, onBack() {},
+    channel: 'qq', account: connectedAccount, rpcCall, onBack() {},
   });
 
   await act(async () => {
@@ -1058,64 +800,6 @@ test('recent conversation picker explains the empty state and refreshes on deman
   assert.equal(calls.filter((call) => call.endpoint === DELIVERY_ENDPOINTS.listSuggestions).length, 2);
 });
 
-test('email recipients can be entered, tested, and saved when conversation suggestions are empty', async (t) => {
-  const calls = [];
-  let targets = [];
-  const botId = 'bot-email';
-  const renderer = await mount(t, {
-    channel: 'email',
-    account: { ...connectedAccount, botId },
-    rpcCall: async (endpoint, payload) => {
-      calls.push({ endpoint, payload });
-      if (endpoint === DELIVERY_ENDPOINTS.list) return { ok: true, value: { targets } };
-      if (endpoint === DELIVERY_ENDPOINTS.listSuggestions) {
-        return { ok: true, value: { suggestions: [] } };
-      }
-      if (endpoint === DELIVERY_ENDPOINTS.test) return { ok: true, value: { sent: true } };
-      if (endpoint === DELIVERY_ENDPOINTS.create) {
-        targets = [payload.target];
-        return { ok: true, value: payload.target };
-      }
-      throw new Error(`unexpected endpoint ${endpoint}`);
-    },
-    onBack() {},
-  });
-  await act(async () => {
-    button(renderer.root, '新建目标').props.onClick();
-    await flush();
-  });
-  await act(async () => {
-    button(renderer.root, '手动填写（高级）').props.onClick();
-    await flush();
-  });
-  const addressInput = renderer.root.findByProps({ name: 'address' });
-  assert.equal(addressInput.props.inputMode, 'email');
-  assert.equal(renderer.root.findByProps({ name: 'kind' }).props.value, 'user');
-  await act(async () => {
-    renderer.root.findByProps({ name: 'targetId' }).props.onChange({ target: { value: 'recipient' } });
-    addressInput.props.onChange({ target: { value: ' user@example.com ' } });
-    await flush();
-  });
-  await act(async () => {
-    button(renderer.root, '测试').props.onClick();
-    await flush();
-  });
-  assert.deepEqual(calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.test), {
-    endpoint: DELIVERY_ENDPOINTS.test,
-    payload: { botId, target: { kind: 'user', route: { address: 'user@example.com' } } },
-  });
-  await act(async () => {
-    renderer.root.findByType('form').props.onSubmit({ preventDefault() {} });
-    await flush();
-  });
-  assert.deepEqual(calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.create), {
-    endpoint: DELIVERY_ENDPOINTS.create,
-    payload: { botId, target: {
-      targetId: 'recipient', kind: 'user', route: { address: 'user@example.com' },
-    } },
-  });
-  assert.ok(renderer.root.findByProps({ 'data-target-id': 'recipient' }));
-});
 
 test('recent conversation names remain platform data in the English UI', async (t) => {
   setImTranslator((key) => en[key] ?? key);
@@ -1127,7 +811,7 @@ test('recent conversation names remain platform data in the English UI', async (
         ok: true,
         value: {
           suggestions: [{
-            id: 'group', name: '飞书项目群', kind: 'group', route: { chatId: 'oc_secret_123456' },
+            id: 'group', name: '飞书项目群', kind: 'group', route: { groupOpenId: 'oc_secret_123456' },
           }],
         },
       };
@@ -1135,7 +819,7 @@ test('recent conversation names remain platform data in the English UI', async (
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
   const renderer = await mount(t, {
-    channel: 'feishu', account: connectedAccount, rpcCall, onBack() {},
+    channel: 'qq', account: connectedAccount, rpcCall, onBack() {},
   });
 
   await act(async () => {
@@ -1153,11 +837,11 @@ test('recent conversation names remain platform data in the English UI', async (
   assert.equal(textOf(docsLink), 'User guide↗');
   assert.equal(
     docsLink.props.href,
-    'https://github.com/xmanrui/dsh-im/blob/main/PROACTIVE_DELIVERY.en.md',
+    'https://github.com/Ryn-Mic/dsh-qq/blob/main/PROACTIVE_DELIVERY.en.md',
   );
   assert.deepEqual(
     renderer.root.findAllByProps({ role: 'tab' }).map(textOf),
-    ['General', 'Delivery settings', 'Bind DS Bot', 'Access settings', 'Conversation directories', 'Group', 'Command panel', 'Voice'],
+    ['General', 'Delivery settings', 'Bind DS Bot', 'Access settings'],
   );
 });
 
@@ -1203,14 +887,14 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
     throw new Error(`unexpected endpoint ${endpoint}`);
   };
   const renderer = await mount(t, {
-    channel: 'telegram', account: connectedAccount, rpcCall, onBack() {},
+    channel: 'qq', account: connectedAccount, rpcCall, onBack() {},
   });
 
   await act(async () => {
     button(renderer.root, '复制').props.onClick();
     await flush();
   });
-  assert.equal(copied.at(-1), 'bot_feishu_01');
+  assert.equal(copied.at(-1), 'bot_qq_01');
 
   await act(async () => {
     button(renderer.root, '新建目标').props.onClick();
@@ -1228,11 +912,10 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   await act(async () => {
     renderer.root.findByProps({ name: 'targetId' }).props.onChange({ target: { value: 'Ops:Topic@A' } });
     renderer.root.findByProps({ name: 'name' }).props.onChange({ target: { value: '告警话题' } });
-    renderer.root.findByProps({ name: 'kind' }).props.onChange({ target: { value: 'topic' } });
+    renderer.root.findByProps({ name: 'kind' }).props.onChange({ target: { value: 'group' } });
   });
   await act(async () => {
-    renderer.root.findByProps({ name: 'chatId' }).props.onChange({ target: { value: '-100123' } });
-    renderer.root.findByProps({ name: 'messageThreadId' }).props.onChange({ target: { value: '42' } });
+    renderer.root.findByProps({ name: 'groupOpenId' }).props.onChange({ target: { value: '-100123' } });
   });
   createForm = renderer.root.findByType('form');
   assert.equal(createForm.findByProps({ name: 'targetId' }).props.pattern, '[A-Za-z0-9._:@-]{1,128}');
@@ -1245,10 +928,10 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   assert.deepEqual(calls.at(-1), {
     endpoint: DELIVERY_ENDPOINTS.test,
     payload: {
-      botId: 'bot_feishu_01',
+      botId: 'bot_qq_01',
       target: {
-        kind: 'topic',
-        route: { chatId: '-100123', messageThreadId: 42 },
+        kind: 'group',
+        route: { groupOpenId: '-100123' },
       },
     },
   });
@@ -1263,12 +946,12 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   assert.deepEqual(calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.create), {
     endpoint: DELIVERY_ENDPOINTS.create,
     payload: {
-      botId: 'bot_feishu_01',
+      botId: 'bot_qq_01',
       target: {
         targetId: 'Ops:Topic@A',
         name: '告警话题',
-        kind: 'topic',
-        route: { chatId: '-100123', messageThreadId: 42 },
+        kind: 'group',
+        route: { groupOpenId: '-100123' },
       },
     },
   });
@@ -1279,20 +962,19 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   assert.doesNotMatch(textOf(row()), /-100123/);
   const typeBadges = row().findByProps({ className: 'dim-targetTitle' }).findAllByType('span');
   assert.equal(typeBadges.length, 1);
-  assert.equal(textOf(typeBadges[0]), '话题');
+  assert.equal(textOf(typeBadges[0]), '群聊');
   await act(async () => {
     button(row(), '复制调用参数').props.onClick();
     await flush();
   });
-  assert.equal(copied.at(-1), '{"botId":"bot_feishu_01","targetId":"Ops:Topic@A"}');
+  assert.equal(copied.at(-1), '{"botId":"bot_qq_01","targetId":"Ops:Topic@A"}');
 
   await act(async () => { button(row(), '编辑').props.onClick(); });
   let editForm = renderer.root.findByType('form');
   assert.equal(editForm.findByProps({ name: 'targetId' }).props.readOnly, true);
   assert.ok(button(editForm, '测试'));
   await act(async () => {
-    editForm.findByProps({ name: 'chatId' }).props.onChange({ target: { value: '-100999' } });
-    editForm.findByProps({ name: 'messageThreadId' }).props.onChange({ target: { value: '77' } });
+    editForm.findByProps({ name: 'groupOpenId' }).props.onChange({ target: { value: '-100999' } });
   });
   editForm = renderer.root.findByType('form');
   await act(async () => {
@@ -1302,18 +984,17 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   assert.deepEqual(calls.at(-1), {
     endpoint: DELIVERY_ENDPOINTS.test,
     payload: {
-      botId: 'bot_feishu_01',
+      botId: 'bot_qq_01',
       target: {
-        kind: 'topic',
-        route: { chatId: '-100999', messageThreadId: 77 },
+        kind: 'group',
+        route: { groupOpenId: '-100999' },
       },
     },
   });
   assert.equal(calls.filter((call) => call.endpoint === DELIVERY_ENDPOINTS.update).length, 0);
   assert.match(textOf(renderer.root.findByType('form')), /测试消息已发送，请到目标会话确认。/);
   await act(async () => {
-    editForm.findByProps({ name: 'chatId' }).props.onChange({ target: { value: '-100123' } });
-    editForm.findByProps({ name: 'messageThreadId' }).props.onChange({ target: { value: '42' } });
+    editForm.findByProps({ name: 'groupOpenId' }).props.onChange({ target: { value: '-100123' } });
     editForm.findByProps({ name: 'name' }).props.onChange({ target: { value: '夜间告警' } });
   });
   editForm = renderer.root.findByType('form');
@@ -1323,12 +1004,12 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   });
   const updateCall = calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.update);
   assert.deepEqual(updateCall.payload, {
-    botId: 'bot_feishu_01',
+    botId: 'bot_qq_01',
     targetId: 'Ops:Topic@A',
     target: {
       name: '夜间告警',
-      kind: 'topic',
-      route: { chatId: '-100123', messageThreadId: 42 },
+      kind: 'group',
+      route: { groupOpenId: '-100123' },
     },
   });
   assert.equal('targetId' in updateCall.payload.target, false);
@@ -1341,496 +1022,10 @@ test('target create, edit, copy, and delete use the minimal RPC payloads', async
   });
   assert.deepEqual(calls.find((call) => call.endpoint === DELIVERY_ENDPOINTS.delete), {
     endpoint: DELIVERY_ENDPOINTS.delete,
-    payload: { botId: 'bot_feishu_01', targetId: 'Ops:Topic@A' },
+    payload: { botId: 'bot_qq_01', targetId: 'Ops:Topic@A' },
   });
   assert.match(
     textOf(renderer.root.findByProps({ className: 'dim-deliveryState dim-deliveryEmpty' })),
     /尚未配置投递目标/,
-  );
-});
-
-test('the Feishu command panel page reorders commands and saves the panel', async (t) => {
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval() { return 1; },
-    clearInterval() {},
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) { callback(); return 1; },
-    cancelAnimationFrame() {},
-  };
-  const bot = {
-    botId: 'bot_slash_panel',
-    configured: true,
-    state: 'connected',
-    slashPanel: { mode: 'custom', order: ['new', 'stop', 'menu'] },
-    bot: { name: '指令面板机器人', appIdMasked: 'cli_slash••••test' },
-    health: { status: 'healthy', summary: '长连接运行正常', lastCheckedAt: Date.now() },
-  };
-  const status = { schemaVersion: 2, revision: 1, state: 'connected', bots: [bot] };
-  const saved = [];
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(IMSettingsTab, {
-      browserLocation: { href: 'http://localhost:9527/settings' },
-      weixinRpcCall: async () => ({ ok: true, value: { revision: 1, bots: [] } }),
-      feishuRpcCall: async (endpoint, payload) => {
-        if (endpoint === FEISHU_ENDPOINTS.setSlashPanel) {
-          saved.push(payload);
-          bot.slashPanel = payload.slashPanel;
-          return { ok: true, value: status };
-        }
-        assert.equal(endpoint, FEISHU_ENDPOINTS.status);
-        return { ok: true, value: status };
-      },
-      deliveryRpcCall: async () => ({ ok: true, value: { targets: [] } }),
-      updateRpcCall: async () => ({
-        ok: true,
-        value: { runningVersion: '4.0.1', canInstall: false },
-      }),
-    }));
-    await flush();
-  });
-  t.after(async () => {
-    await act(async () => { renderer.unmount(); await flush(); });
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-
-  await act(async () => {
-    renderer.root.findByProps({ id: 'dim-tab-feishu' }).props.onClick();
-    await flush();
-    await flush();
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} });
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
-    await flush();
-  });
-  const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  await act(async () => {
-    button(page, '指令面板').props.onClick();
-    await flush();
-  });
-
-  const panelRoot = () => renderer.root.findByProps({ className: 'dim-feishuGroupSettings' });
-  const commandNames = () => panelRoot()
-    .findAllByProps({ className: 'dim-feishuPanelCommand' })
-    .map(textOf);
-  assert.deepEqual(commandNames(), [
-    '/new — 开启全新会话',
-    '/stop — 停止当前任务',
-    '/menu — 打开功能菜单',
-  ]);
-  assert.equal(panelRoot().findByProps({ 'aria-label': '指令面板模式' }).props.value, 'custom');
-
-  // Reordering is a local edit until the panel is saved.
-  await act(async () => {
-    panelRoot().findByProps({ 'aria-label': '下移 /new' }).props.onClick();
-    await flush();
-  });
-  await act(async () => {
-    panelRoot().findByProps({ 'aria-label': '移除 /menu' }).props.onClick();
-    await flush();
-  });
-  assert.deepEqual(commandNames(), [
-    '/stop — 停止当前任务',
-    '/new — 开启全新会话',
-  ]);
-  assert.deepEqual(saved, [], 'editing must not hit the Host before saving');
-
-  await act(async () => {
-    button(renderer.root, '保存').props.onClick();
-    await flush();
-    await flush();
-  });
-
-  assert.deepEqual(saved, [{
-    botId: 'bot_slash_panel',
-    slashPanel: { mode: 'custom', order: ['stop', 'new'] },
-  }]);
-  assert.match(textOf(panelRoot()), /已保存，面板稍后同步/);
-});
-
-test('the Feishu command panel page can go back to the shipped manifest', async (t) => {
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval() { return 1; },
-    clearInterval() {},
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) { callback(); return 1; },
-    cancelAnimationFrame() {},
-  };
-  const bot = {
-    botId: 'bot_slash_default',
-    configured: true,
-    state: 'connected',
-    slashPanel: { mode: 'custom', order: ['new'] },
-    bot: { name: '默认面板机器人', appIdMasked: 'cli_default••••test' },
-    health: { status: 'healthy', summary: '长连接运行正常', lastCheckedAt: Date.now() },
-  };
-  const status = { schemaVersion: 2, revision: 1, state: 'connected', bots: [bot] };
-  const saved = [];
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(IMSettingsTab, {
-      browserLocation: { href: 'http://localhost:9527/settings' },
-      weixinRpcCall: async () => ({ ok: true, value: { revision: 1, bots: [] } }),
-      feishuRpcCall: async (endpoint, payload) => {
-        if (endpoint === FEISHU_ENDPOINTS.setSlashPanel) {
-          saved.push(payload);
-          bot.slashPanel = payload.slashPanel;
-          return { ok: true, value: status };
-        }
-        return { ok: true, value: status };
-      },
-      deliveryRpcCall: async () => ({ ok: true, value: { targets: [] } }),
-      updateRpcCall: async () => ({ ok: true, value: { runningVersion: '4.0.1', canInstall: false } }),
-    }));
-    await flush();
-  });
-  t.after(async () => {
-    await act(async () => { renderer.unmount(); await flush(); });
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-
-  await act(async () => {
-    renderer.root.findByProps({ id: 'dim-tab-feishu' }).props.onClick();
-    await flush();
-    await flush();
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} });
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
-    await flush();
-  });
-  const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  await act(async () => {
-    button(page, '指令面板').props.onClick();
-    await flush();
-  });
-
-  const panelRoot = () => renderer.root.findByProps({ className: 'dim-feishuGroupSettings' });
-  await act(async () => {
-    panelRoot().findByProps({ 'aria-label': '指令面板模式' }).props.onChange({ target: { value: 'default' } });
-    await flush();
-  });
-  await act(async () => {
-    button(renderer.root, '保存').props.onClick();
-    await flush();
-    await flush();
-  });
-
-  assert.deepEqual(saved, [{
-    botId: 'bot_slash_default',
-    slashPanel: { mode: 'default', order: [] },
-  }]);
-});
-
-test('the Feishu command panel page can copy a panel to every other bot', async (t) => {
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval() { return 1; },
-    clearInterval() {},
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) { callback(); return 1; },
-    cancelAnimationFrame() {},
-  };
-  const source = {
-    botId: 'bot_panel_source',
-    configured: true,
-    state: 'connected',
-    slashPanel: { mode: 'custom', order: ['new', 'stop'] },
-    bot: { name: '来源机器人', appIdMasked: 'cli_source••••test' },
-    health: { status: 'healthy', summary: '长连接运行正常', lastCheckedAt: Date.now() },
-  };
-  const other = {
-    botId: 'bot_panel_other',
-    configured: true,
-    state: 'disconnected',
-    slashPanel: { mode: 'default', order: [] },
-    bot: { name: '另一个机器人', appIdMasked: 'cli_other••••test' },
-    health: { status: 'offline', summary: '等待重连' },
-  };
-  const status = { schemaVersion: 2, revision: 1, state: 'connected', bots: [source, other] };
-  const calls = [];
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(IMSettingsTab, {
-      browserLocation: { href: 'http://localhost:9527/settings' },
-      weixinRpcCall: async () => ({ ok: true, value: { revision: 1, bots: [] } }),
-      feishuRpcCall: async (endpoint, payload) => {
-        calls.push({ endpoint, payload });
-        if (endpoint === FEISHU_ENDPOINTS.setSlashPanel) {
-          const bot = status.bots.find((entry) => entry.botId === payload.botId);
-          bot.slashPanel = payload.slashPanel;
-          return { ok: true, value: status };
-        }
-        return { ok: true, value: status };
-      },
-      deliveryRpcCall: async () => ({ ok: true, value: { targets: [] } }),
-      updateRpcCall: async () => ({ ok: true, value: { runningVersion: '4.0.1', canInstall: false } }),
-    }));
-    await flush();
-  });
-  t.after(async () => {
-    await act(async () => { renderer.unmount(); await flush(); });
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-
-  await act(async () => {
-    renderer.root.findByProps({ id: 'dim-tab-feishu' }).props.onClick();
-    await flush();
-    await flush();
-  });
-  const sourceCard = renderer.root.findByProps({ 'data-bot-id': 'bot_panel_source' });
-  await act(async () => {
-    sourceCard.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} });
-  });
-  await act(async () => {
-    sourceCard.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
-    await flush();
-  });
-  const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  await act(async () => {
-    button(page, '指令面板').props.onClick();
-    await flush();
-  });
-
-  // The copy asks first and says how many bots lose their own panel.
-  await act(async () => {
-    button(renderer.root, '保存并同步到其他机器人').props.onClick();
-    await flush();
-    await flush();
-  });
-  const panelRoot = () => renderer.root.findByProps({ className: 'dim-feishuGroupSettings' });
-  assert.match(textOf(panelRoot()), /将把这套面板设置写入另外\s*1\s*个飞书机器人/);
-  assert.equal(
-    calls.filter((call) => call.endpoint === FEISHU_ENDPOINTS.setSlashPanel).length,
-    0,
-    'asking for confirmation must not write anything yet',
-  );
-
-  await act(async () => {
-    button(renderer.root, '确认同步').props.onClick();
-    await flush();
-    await flush();
-  });
-
-  assert.deepEqual(
-    calls.filter((call) => call.endpoint === FEISHU_ENDPOINTS.setSlashPanel),
-    [
-      { endpoint: FEISHU_ENDPOINTS.setSlashPanel, payload: { botId: 'bot_panel_source', slashPanel: { mode: 'custom', order: ['new', 'stop'] } } },
-      { endpoint: FEISHU_ENDPOINTS.setSlashPanel, payload: { botId: 'bot_panel_other', slashPanel: { mode: 'custom', order: ['new', 'stop'] } } },
-    ],
-  );
-  assert.deepEqual(other.slashPanel, { mode: 'custom', order: ['new', 'stop'] });
-  assert.match(textOf(panelRoot()), /已同步到\s*2\s*个机器人/);
-});
-
-test('the command panel page keeps the saved panel when the account snapshot is stale', async (t) => {
-  // 保存成功后 dirty 归 false 会重跑快照 effect：父层若不把保存结果并入 account，
-  // 页面就会把保存前的列表回填（用户以为没保存成功），随后的“复制到其他机器人”
-  // 还会把这套旧列表写回去。这里刻意让 status 里的快照停留在保存前。
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval() { return 1; },
-    clearInterval() {},
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) { callback(); return 1; },
-    cancelAnimationFrame() {},
-  };
-  const source = {
-    botId: 'bot_panel_stale',
-    configured: true,
-    state: 'connected',
-    slashPanel: { mode: 'custom', order: ['help', 'new'] },
-    bot: { name: '固定快照机器人', appIdMasked: 'cli_stale••••test' },
-    health: { status: 'healthy', summary: '长连接运行正常', lastCheckedAt: Date.now() },
-  };
-  const other = {
-    botId: 'bot_panel_other',
-    configured: true,
-    state: 'disconnected',
-    slashPanel: { mode: 'default', order: [] },
-    bot: { name: '另一个机器人', appIdMasked: 'cli_other••••test' },
-    health: { status: 'offline', summary: '等待重连' },
-  };
-  const status = { schemaVersion: 2, revision: 1, state: 'connected', bots: [source, other] };
-  const writes = [];
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(IMSettingsTab, {
-      browserLocation: { href: 'http://localhost:9527/settings' },
-      weixinRpcCall: async () => ({ ok: true, value: { revision: 1, bots: [] } }),
-      feishuRpcCall: async (endpoint, payload) => {
-        if (endpoint === FEISHU_ENDPOINTS.setSlashPanel) {
-          writes.push(payload);
-          // 只有保存响应里的快照是新的：页面不会因为保存而重拉 status，父层那份
-          // account 仍是保存前的。
-          return {
-            ok: true,
-            value: {
-              ...status,
-              bots: status.bots.map((entry) => (
-                entry.botId === payload.botId ? { ...entry, slashPanel: payload.slashPanel } : entry
-              )),
-            },
-          };
-        }
-        return { ok: true, value: status };
-      },
-      deliveryRpcCall: async () => ({ ok: true, value: { targets: [] } }),
-      updateRpcCall: async () => ({ ok: true, value: { runningVersion: '4.0.1', canInstall: false } }),
-    }));
-    await flush();
-  });
-  t.after(async () => {
-    await act(async () => { renderer.unmount(); await flush(); });
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-
-  await act(async () => {
-    renderer.root.findByProps({ id: 'dim-tab-feishu' }).props.onClick();
-    await flush();
-    await flush();
-  });
-  const sourceCard = renderer.root.findByProps({ 'data-bot-id': 'bot_panel_stale' });
-  await act(async () => {
-    sourceCard.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} });
-  });
-  await act(async () => {
-    sourceCard.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
-    await flush();
-  });
-  const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  await act(async () => {
-    button(page, '指令面板').props.onClick();
-    await flush();
-  });
-
-  const panelRoot = () => renderer.root.findByProps({ className: 'dim-feishuGroupSettings' });
-  const commandNames = () => panelRoot()
-    .findAllByProps({ className: 'dim-feishuPanelCommand' })
-    .map(textOf);
-  assert.deepEqual(commandNames(), ['/help — 查看帮助', '/new — 开启全新会话']);
-
-  await act(async () => {
-    panelRoot().findByProps({ 'aria-label': '移除 /help' }).props.onClick();
-    await flush();
-  });
-  await act(async () => {
-    button(renderer.root, '保存').props.onClick();
-    await flush();
-    await flush();
-  });
-
-  assert.deepEqual(writes, [{
-    botId: 'bot_panel_stale',
-    slashPanel: { mode: 'custom', order: ['new'] },
-  }]);
-  // 保存后页面停在保存结果上，而不是回到父层的旧快照。
-  assert.deepEqual(commandNames(), ['/new — 开启全新会话'],
-    'the page must show the saved panel, not the stale account snapshot');
-  assert.equal(panelRoot().findByProps({ 'aria-label': '指令面板模式' }).props.value, 'custom');
-
-  // 复制用的是这份已保存的列表，而不是旧快照里的 help/new。
-  await act(async () => {
-    button(renderer.root, '保存并同步到其他机器人').props.onClick();
-    await flush();
-    await flush();
-  });
-  await act(async () => {
-    button(renderer.root, '确认同步').props.onClick();
-    await flush();
-    await flush();
-  });
-
-  assert.deepEqual(writes.slice(1), [
-    { botId: 'bot_panel_stale', slashPanel: { mode: 'custom', order: ['new'] } },
-    { botId: 'bot_panel_other', slashPanel: { mode: 'custom', order: ['new'] } },
-  ], 'the copy must send the saved panel, not the stale one');
-});
-
-test('the Feishu command panel page reports a single-bot channel instead of copying', async (t) => {
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    setInterval() { return 1; },
-    clearInterval() {},
-    setTimeout() { return 1; },
-    clearTimeout() {},
-    requestAnimationFrame(callback) { callback(); return 1; },
-    cancelAnimationFrame() {},
-  };
-  const solo = {
-    botId: 'bot_panel_solo',
-    configured: true,
-    state: 'connected',
-    slashPanel: { mode: 'custom', order: ['new'] },
-    bot: { name: '唯一的机器人', appIdMasked: 'cli_solo••••test' },
-    health: { status: 'healthy', summary: '长连接运行正常', lastCheckedAt: Date.now() },
-  };
-  const status = { schemaVersion: 2, revision: 1, state: 'connected', bots: [solo] };
-  const calls = [];
-  let renderer;
-  await act(async () => {
-    renderer = create(React.createElement(IMSettingsTab, {
-      browserLocation: { href: 'http://localhost:9527/settings' },
-      weixinRpcCall: async () => ({ ok: true, value: { revision: 1, bots: [] } }),
-      feishuRpcCall: async (endpoint, payload) => {
-        calls.push({ endpoint, payload });
-        return { ok: true, value: status };
-      },
-      deliveryRpcCall: async () => ({ ok: true, value: { targets: [] } }),
-      updateRpcCall: async () => ({ ok: true, value: { runningVersion: '4.0.1', canInstall: false } }),
-    }));
-    await flush();
-  });
-  t.after(async () => {
-    await act(async () => { renderer.unmount(); await flush(); });
-    if (previousWindow === undefined) delete globalThis.window;
-    else globalThis.window = previousWindow;
-  });
-
-  await act(async () => {
-    renderer.root.findByProps({ id: 'dim-tab-feishu' }).props.onClick();
-    await flush();
-    await flush();
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '展开该账号的设置' }).props.onClick({ stopPropagation() {} });
-  });
-  await act(async () => {
-    renderer.root.findByProps({ 'aria-label': '更多机器人设置' }).props.onClick();
-    await flush();
-  });
-  const page = renderer.root.findByProps({ className: 'dim-deliveryPage' });
-  await act(async () => {
-    button(page, '指令面板').props.onClick();
-    await flush();
-  });
-  await act(async () => {
-    button(renderer.root, '保存并同步到其他机器人').props.onClick();
-    await flush();
-    await flush();
-  });
-
-  assert.match(
-    textOf(renderer.root.findByProps({ className: 'dim-feishuGroupSettings' })),
-    /这个渠道没有其他飞书机器人，不用同步。/,
-  );
-  assert.equal(
-    calls.filter((call) => call.endpoint === FEISHU_ENDPOINTS.setSlashPanel).length,
-    0,
   );
 });

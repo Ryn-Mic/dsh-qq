@@ -79,7 +79,7 @@ test('resolveHostLanguageTag prefers the plugin config, then DSH settings, then 
 test('InterfaceLanguageStore persists the mirrored tag and survives a damaged document', async (t) => {
   const home = await directory(t);
   const path = interfaceLanguageSettingsPath({ dshHome: home });
-  assert.equal(path, join(home, 'integrations', 'dsh-im', 'interface-language.json'));
+  assert.equal(path, join(home, 'integrations', 'dsh-qq', 'interface-language.json'));
 
   const store = await new InterfaceLanguageStore(path).load();
   assert.equal(store.getLanguageTag(), null, 'a first run has nothing mirrored yet');

@@ -1,4 +1,4 @@
-import diagnostics from '../../weixin/connection-error.en.mjs';
+import diagnostics from './helpers/weixin-diagnostics.mjs';
 // English translations (weixin area). Keys are exact Chinese literals passed to t().
 export default {
   ...diagnostics,

@@ -25,7 +25,7 @@ async function startHost(t, language) {
   let controller;
   let languageAtChannelStart;
   internals.installHostLanguageRpc = (_ctx, value) => { controller = value; };
-  internals.applyTelegram = async () => { languageAtChannelStart = controller.language(); };
+  internals.applyQq = async () => { languageAtChannelStart = controller.language(); };
   const errors = [];
   await createImHostPlugin(internals).apply({
     connection: { fetch: {} },

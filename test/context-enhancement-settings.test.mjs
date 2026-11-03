@@ -19,31 +19,13 @@ import {
   TokenBotConfigStore,
   deriveTokenBotIdentity,
 } from '../src/channels/shared/token-config-store.mjs';
-import { createWecomRpcHandler, WECOM_ENDPOINTS } from '../plugin-src/host/channels/wecom/rpc.mjs';
-import { createWeixinRpcHandler, WEIXIN_ENDPOINTS } from '../plugin-src/host/channels/weixin/rpc.mjs';
-import { createFeishuRpcHandler, FEISHU_ENDPOINTS } from '../plugin-src/host/channels/feishu/rpc.mjs';
-import { createDingtalkRpcHandler, DINGTALK_ENDPOINTS } from '../plugin-src/host/channels/dingtalk/rpc.mjs';
 import { createQqRpcHandler, QQ_ENDPOINTS } from '../plugin-src/host/channels/qq/rpc.mjs';
-import { createSlackRpcHandler, SLACK_ENDPOINTS } from '../plugin-src/host/channels/slack/rpc.mjs';
-import { createTelegramRpcHandler, TELEGRAM_ENDPOINTS } from '../plugin-src/host/channels/telegram/rpc.mjs';
-import { createDiscordRpcHandler, DISCORD_ENDPOINTS } from '../plugin-src/host/channels/discord/rpc.mjs';
-import { createWhatsappRpcHandler, WHATSAPP_ENDPOINTS } from '../plugin-src/host/channels/whatsapp/rpc.mjs';
 import {
   SET_CONTEXT_ENHANCEMENT_ENDPOINT,
   validContextEnhancementPayload,
 } from '../plugin-src/host/channels/shared/context-enhancement-rpc.mjs';
 
-const CHANNELS = [
-  ['wecom', createWecomRpcHandler, WECOM_ENDPOINTS],
-  ['weixin', createWeixinRpcHandler, WEIXIN_ENDPOINTS],
-  ['feishu', createFeishuRpcHandler, FEISHU_ENDPOINTS],
-  ['dingtalk', createDingtalkRpcHandler, DINGTALK_ENDPOINTS],
-  ['qq', createQqRpcHandler, QQ_ENDPOINTS],
-  ['slack', createSlackRpcHandler, SLACK_ENDPOINTS],
-  ['telegram', createTelegramRpcHandler, TELEGRAM_ENDPOINTS],
-  ['discord', createDiscordRpcHandler, DISCORD_ENDPOINTS],
-  ['whatsapp', createWhatsappRpcHandler, WHATSAPP_ENDPOINTS],
-];
+const CHANNELS = [['qq', createQqRpcHandler, QQ_ENDPOINTS]];
 
 const enabled = (overrides = {}) => {
   const {

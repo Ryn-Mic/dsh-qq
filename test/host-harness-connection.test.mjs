@@ -5,10 +5,7 @@ import { harnessConnection } from '../plugin-src/host/harness-connection.mjs';
 import { inject as hostInject } from '../plugin-src/host/index.mjs';
 import { toPosixPath } from './support/filesystem.mjs';
 
-const IM_CHANNELS = [
-  'weixin', 'feishu', 'dingtalk', 'wecom', 'qq',
-  'slack', 'telegram', 'discord', 'whatsapp', 'matrix', 'wecom-app', 'imessage', 'email',
-];
+const IM_CHANNELS = ['qq'];
 
 function modernContext(extra = {}) {
   return Object.defineProperties({ typertGateway: { invoke() {}, stream() {} }, on() {} }, Object.getOwnPropertyDescriptors(extra));
@@ -120,7 +117,7 @@ async function assembledHarness(channel, ctx, config = {}, inspect) {
   }
 }
 
-for (const channel of [...IM_CHANNELS, 'office']) {
+for (const channel of IM_CHANNELS) {
   test(`${channel} production uses the modern Host gateway with no webServer or listening port`, async () => {
     const root = {};
     const ctx = modernContext({ credentials: {}, root });

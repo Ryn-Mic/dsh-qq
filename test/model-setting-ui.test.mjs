@@ -27,11 +27,7 @@ const CATALOG = Object.freeze({
   })]),
   failures: Object.freeze([]),
 });
-const channels = await Promise.all([
-  ['weixin', 'WeixinSettingsTab'], ['wecom', 'WecomSettingsTab'], ['feishu', 'FeishuSettingsTab'],
-  ['dingtalk', 'DingtalkSettingsTab'], ['qq', 'QqSettingsTab'], ['slack', 'SlackSettingsTab'],
-  ['telegram', 'TelegramSettingsTab'], ['discord', 'DiscordSettingsTab'], ['whatsapp', 'WhatsappSettingsTab'],
-].map(async ([name, component]) => {
+const channels = await Promise.all([['qq', 'QqSettingsTab']].map(async ([name, component]) => {
   const api = await import(`../plugin-src/client/channels/${name}/api.js`);
   const ui = await import(`../plugin-src/client/channels/${name}/index.js`);
   return {
@@ -283,10 +279,10 @@ test('English model and effort settings translate defaults and explanatory text'
   assert.match(textOf(renderer.root), /Use the default reasoning effort from the model or provider/u);
 });
 
-test('WeCom releases the card after a model save failure and retries without changing the old selection', async (t) => {
+test('QQ releases the card after a model save failure and retries without changing the old selection', async (t) => {
   mockWindow(t);
-  const channel = channels.find(({ name }) => name === 'wecom');
-  let current = snapshot('wecom');
+  const channel = channels.find(({ name }) => name === 'qq');
+  let current = snapshot('qq');
   let attempts = 0;
   const renderer = await mount(t, channel.Settings, { rpcCall: async (endpoint, payload) => {
     if (endpoint === 'connection.status') return { ok: true, value: current };
@@ -299,7 +295,7 @@ test('WeCom releases the card after a model save failure and retries without cha
       bots: current.bots.map(bot => bot.botId === payload.botId ? { ...bot, model: payload.model } : bot) };
     return { ok: true, value: current };
   } });
-  const first = () => renderer.root.findByProps({ 'data-bot-id': 'wecom_0' });
+  const first = () => renderer.root.findByProps({ 'data-bot-id': 'qq_0' });
   await openMenu(first(), '模型');
   await choose(first(), 'GPT-5openai/gpt-5');
   assert.equal(first().findAllByProps({ role: 'menu' }).length, 0);

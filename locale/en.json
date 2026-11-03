@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "IM bots (dsh-im)",
-    "description": "Connect Telegram, WhatsApp, Slack, Discord, Matrix, WeChat, Feishu, WeCom, DingTalk, and QQ to DSH."
+    "title": "QQ bot (dsh-qq)",
+    "description": "Personal QQ-only integration for DeepSeek Harness, forked from xmanrui/dsh-im. Not published to npm."
   }
 }

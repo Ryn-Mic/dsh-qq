@@ -5,8 +5,6 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { createSidebarSettingsRpcHandler, hasConfiguredChannel, installSidebarSettingsRpc, SidebarSettingsStore } from '../plugin-src/host/sidebar-settings.mjs';
 import { QqConfigStore, deriveQqBotIdentity } from '../src/channels/qq/config-store.mjs';
-import { WeixinConfigStore, deriveWeixinBotIdentity } from '../src/channels/weixin/config-store.mjs';
-import { OfficeConfigStore } from '../src/channels/office/config-store.mjs';
 import { installInboundTtlRpc } from '../plugin-src/host/inbound-ttl-rpc.mjs';
 
 async function home(t) {
@@ -15,43 +13,7 @@ async function home(t) {
   return root;
 }
 
-test('auto follows saved channels across additions, removals and restart; forced modes persist', async (t) => {
-  const dshHome = await home(t);
-  const config = { dshHome };
-  const call = createSidebarSettingsRpcHandler({ config });
-  const get = () => call('settings.sidebar-entry.get', {});
-  assert.deepEqual(await get(), { ok: true, value: { mode: 'auto', visible: true } });
-  const wx = await new WeixinConfigStore(join(dshHome, 'integrations/dsh-weixin/config.json')).load();
-  const wxId = deriveWeixinBotIdentity('account@im.bot');
-  await wx.save({ ...wxId, accountId: 'account@im.bot', ownerUserId: 'owner', baseUrl: 'https://ilinkai.weixin.qq.com' });
-  assert.deepEqual((await get()).value, { mode: 'auto', visible: false });
-  const qq = await new QqConfigStore(join(dshHome, 'integrations/dsh-qq/config.json')).load();
-  const qqId = deriveQqBotIdentity('102345678');
-  await qq.save({ ...qqId, appId: '102345678', ownerUserOpenid: 'owner' });
-  await wx.remove(wxId.botId);
-  assert.equal((await get()).value.visible, false);
-  const set = (mode) => call('settings.sidebar-entry.set', { mode });
-  assert.deepEqual((await set('show')).value, { mode: 'show', visible: true });
-  assert.deepEqual((await createSidebarSettingsRpcHandler({ config })('settings.sidebar-entry.get', {})).value,
-    { mode: 'show', visible: true });
-  await qq.remove(qqId.botId);
-  assert.deepEqual((await set('hide')).value, { mode: 'hide', visible: false });
-  assert.deepEqual((await set('auto')).value, { mode: 'auto', visible: true });
-});
 
-test('Office-only setup and custom channel paths count without starting connections', async (t) => {
-  const dshHome = await home(t);
-  const officePath = join(dshHome, 'custom', 'office.json');
-  const office = await new OfficeConfigStore(officePath).load();
-  await office.save({ baseUrl: 'https://office.example.com', deviceId: 'test-device',
-    deviceTokenRef: 'DSH_OFFICE_DEVICE_TOKEN_1234567890ABCDEF12345678' });
-  assert.equal(await hasConfiguredChannel({ dshHome }), false);
-  assert.equal(await hasConfiguredChannel({ dshHome, office: { configPath: officePath } }), true);
-  await office.clear();
-  const qq = await new QqConfigStore(join(dshHome, 'custom', 'config.json')).load();
-  await qq.save({ ...deriveQqBotIdentity('102345678'), appId: '102345678', ownerUserOpenid: 'owner' });
-  assert.equal(await hasConfiguredChannel({ dshHome, qq: { dataDir: join(dshHome, 'custom') } }), true);
-});
 
 test('bad configuration is not an empty channel list; forced modes remain usable', async (t) => {
   const dshHome = await home(t);

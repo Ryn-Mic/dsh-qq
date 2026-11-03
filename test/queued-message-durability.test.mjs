@@ -6,7 +6,6 @@ import { join } from 'node:path';
 
 import { ConversationStateStore } from '../src/channels/shared/conversation-state-store.mjs';
 import { QqStateStore } from '../src/channels/qq/state-store.mjs';
-import { TelegramHarnessBridge } from '../src/channels/telegram/telegram-bridge.mjs';
 import { QqHarnessBridge } from '../src/channels/qq/qq-bridge.mjs';
 
 const logger = { info() {}, warn() {}, error() {} };
@@ -116,7 +115,7 @@ function answeringHarness() {
   };
 }
 
-for (const [channel, fixture] of Object.entries(channels)) {
+for (const [channel, fixture] of Object.entries(channels).filter(([channel]) => channel === 'qq')) {
   test(`${channel}: a queued message is persisted, replayed when unsubmitted, reported when submitted`, async (t) => {
     const directory = await mkdtemp(join(tmpdir(), `dsh-pending-${channel}-`));
     const statePath = join(directory, 'state.json');

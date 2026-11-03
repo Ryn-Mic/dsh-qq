@@ -25,6 +25,9 @@ export const QQ_ENDPOINTS = Object.freeze({
   setBusyMessageMode: 'bot.message-mode.set',
   setAccessPolicy: 'bot.access-policy.set',
   setAlias: 'bot.alias.set',
+  setFeatures: 'bot.features.set',
+  nativeManage: 'bot.native.manage',
+  sendRich: 'bot.rich.send',
 });
 
 const PROVISION_STATES = new Set(['starting', 'pending', 'refreshing', 'connecting', 'connected', 'failed', 'cancelled']);
@@ -56,6 +59,9 @@ export function unwrapRpcResult(result) {
   if (!result.ok) {
     const error = new Error(text(result.error?.message, 'QQ 操作失败'));
     error.code = text(result.error?.code, 'QQ_RPC_ERROR', 80);
+    for (const key of ['menuBackup', 'menuRestore', 'reconciliationRequired']) {
+      if (Object.hasOwn(result.error ?? {}, key)) error[key] = result.error[key];
+    }
     Object.assign(error, diagnosticFields(result.error));
     throw error;
   }
@@ -98,6 +104,7 @@ function normalizeBot(value) {
   return {
     botId: id(value.botId),
     connected,
+    features: { streamingEnabled: value.features?.streamingEnabled === true, nativeCallbacks: true },
     state: connected ? 'connected' : state,
     workspace: text(value.workspace, '', 4_096),
     model: normalizeModelSelection(value.model),

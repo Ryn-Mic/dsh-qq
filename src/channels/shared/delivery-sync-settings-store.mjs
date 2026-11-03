@@ -75,7 +75,7 @@ export class DeliverySyncSettingsStore {
 /** Path of the document, for diagnostics and tests. */
 export function deliverySyncSettingsPath(config = {}) {
   const root = resolve(config.dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'));
-  return join(root, 'integrations', 'dsh-im', 'delivery-sync-settings.json');
+  return join(root, 'integrations', 'dsh-qq', 'delivery-sync-settings.json');
 }
 
 /** One settings owner per DSH home, shared by the UI, the RPC and the coordinator. */

@@ -1,3 +1,4 @@
+import { QqHarnessClient } from '../src/channels/qq/harness-client.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -29,14 +30,7 @@ import {
   askInWorkspaceSession,
   WORKSPACE_SESSION_STALE,
 } from '../src/channels/shared/workspace-session.mjs';
-import { HarnessClient as WeixinHarnessClient } from '../src/channels/weixin/harness-client.mjs';
-import { HarnessClient as FeishuHarnessClient } from '../src/channels/feishu/harness-client.mjs';
-import { HarnessClient as DingtalkHarnessClient } from '../src/channels/dingtalk/harness-client.mjs';
 import { ConversationStateStore } from '../src/channels/shared/conversation-state-store.mjs';
-import { WeixinStateStore } from '../src/channels/weixin/state-store.mjs';
-import { StateStore as FeishuStateStore } from '../src/channels/feishu/state-store.mjs';
-import { DingtalkStateStore } from '../src/channels/dingtalk/state-store.mjs';
-import { WecomStateStore } from '../src/channels/wecom/state-store.mjs';
 import { QqStateStore } from '../src/channels/qq/state-store.mjs';
 import {
   TOKEN_BOT_ENDPOINTS,
@@ -895,37 +889,6 @@ test('a blocked workspace switch for one bot does not block another bot session'
   await switching;
 });
 
-test('clearing workspace sessions preserves message deduplication and channel cursors', async (t) => {
-  const { root } = await fixture(t);
-  const stores = [
-    ['shared', await new ConversationStateStore(join(root, 'shared-state.json')).load()],
-    ['weixin', await new WeixinStateStore(join(root, 'weixin-state.json')).load()],
-    ['feishu', await new FeishuStateStore(join(root, 'feishu-state.json')).load()],
-    ['dingtalk', await new DingtalkStateStore(join(root, 'dingtalk-state.json'), {
-      idFactory: () => 'request',
-      now: () => '2026-08-17T00:00:00.000Z',
-    }).load()],
-    ['wecom', await new WecomStateStore(join(root, 'wecom-state.json')).load()],
-    ['qq', await new QqStateStore(join(root, 'qq-state.json')).load()],
-  ];
-
-  for (const [name, store] of stores) {
-    await store.setSession('conversation', `session-${name}`);
-    await store.markSeen(`message-${name}`);
-  }
-  await stores[0][1].setCursor(42);
-  await stores[1][1].setGetUpdatesBuf('next-weixin-cursor');
-  await stores[3][1].recordPendingSender('staff-one', 'User One');
-
-  for (const [name, store] of stores) {
-    await store.clearSessions();
-    assert.equal(store.sessionFor('conversation'), null, `${name} clears its Harness session`);
-    assert.equal(store.hasSeen(`message-${name}`), true, `${name} keeps message deduplication`);
-  }
-  assert.equal(stores[0][1].cursor(), 42);
-  assert.equal(stores[1][1].getUpdatesBuf(), 'next-weixin-cursor');
-  assert.equal(stores[3][1].pendingSenders().length, 1);
-});
 
 test('workspace-aware controller decorates status and updates one bot', async (t) => {
   const { path, defaultWorkspace, alternateWorkspace } = await fixture(t);
@@ -1590,13 +1553,9 @@ test('workspace command message splitting bounds a single very long path', () =>
   assert.equal(messages.join(''), message);
 });
 
-test('all nine channel bridge families advertise and fan out workspace command replies', async () => {
+test('QQ and shared bridge families advertise and fan out workspace command replies', async () => {
   const bridgeFiles = [
     '../src/channels/shared/text-harness-bridge.mjs',
-    '../src/channels/weixin/weixin-bridge.mjs',
-    '../src/channels/feishu/bridge.mjs',
-    '../src/channels/dingtalk/dingtalk-bridge.mjs',
-    '../src/channels/wecom/wecom-bridge.mjs',
     '../src/channels/qq/qq-bridge.mjs',
   ];
   for (const file of bridgeFiles) {
@@ -1660,11 +1619,7 @@ test('a stale bot scope cannot finish listing workspace sessions after same-id r
   await assert.rejects(pending, { code: 'workspace-bot-not-found' });
 });
 
-for (const [name, Client] of [
-  ['Weixin', WeixinHarnessClient],
-  ['Feishu', FeishuHarnessClient],
-  ['DingTalk', DingtalkHarnessClient],
-]) {
+for (const [name, Client] of [['QQ', QqHarnessClient]]) {
   test(`${name} Harness creates a session with an explicit workspace override`, async () => {
     const client = new Client({
       baseUrl: 'http://127.0.0.1:3080',

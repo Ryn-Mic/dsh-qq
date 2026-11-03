@@ -10,13 +10,7 @@ const text = node => typeof node === 'string' ? node : node?.children?.map(text)
 const button = (root, label) => root.findAllByType('button').find(node => text(node) === label || node.props['aria-label'] === label);
 async function flush() { for (let i = 0; i < 15; i++) await Promise.resolve(); }
 
-const channels = [
-  ['wecom', 'WecomSettingsTab'], ['wecom-app', 'WecomAppSettingsTab'],
-  ['weixin', 'WeixinSettingsTab'], ['feishu', 'FeishuSettingsTab'],
-  ['dingtalk', 'DingtalkSettingsTab'], ['qq', 'QqSettingsTab'],
-  ['slack', 'SlackSettingsTab'], ['telegram', 'TelegramSettingsTab'],
-  ['discord', 'DiscordSettingsTab'], ['whatsapp', 'WhatsappSettingsTab'], ['imessage', 'IMessageSettingsTab'],
-];
+const channels = [['qq', 'QqSettingsTab']];
 function mockWindow(t) {
   const previous = globalThis.window;
   globalThis.window = {

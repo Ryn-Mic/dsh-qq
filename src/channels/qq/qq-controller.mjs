@@ -297,6 +297,53 @@ export class QqController {
     });
   }
 
+  async configureFeatures(botId, features) {
+    if (!features || typeof features !== 'object' || Array.isArray(features)
+      || Object.keys(features).some(key => key !== 'streamingEnabled')
+      || typeof features.streamingEnabled !== 'boolean') {
+      throw new TypeError('Invalid QQ feature settings');
+    }
+    return this.#withBotTransition(botId, async () => {
+      const config = this.#configStore.get(botId);
+      if (!config) throw new Error('Unknown QQ bot');
+      await this.#configStore.save({ ...config, streamingEnabled: features.streamingEnabled });
+      this.#runtimes.get(botId)?.setStreamingEnabled?.(features.streamingEnabled);
+      this.#touch();
+      return this.status();
+    });
+  }
+
+  async nativeManagement(botId, action, args = {}, options = {}) {
+    if (!this.#configStore.get(botId)) throw new Error('Unknown QQ bot');
+    return this.#withBotTransition(botId, async () => {
+      const runtime = this.#runtimes.get(botId);
+      if (!runtime?.status?.ready || typeof runtime.nativeManagement !== 'function') {
+        const error = new Error('QQ bot is not connected');
+        error.code = 'bot-not-connected';
+        throw error;
+      }
+      return runtime.nativeManagement(action, args, options);
+    });
+  }
+
+  async sendRichMessage(botId, target, payload, options = {}) {
+    if (!this.#configStore.get(botId)) throw new Error('Unknown QQ bot');
+    return this.#withBotTransition(botId, async () => {
+      const runtime = this.#runtimes.get(botId);
+      if (!runtime?.status?.ready || typeof runtime.sendRich !== 'function') {
+        const error = new Error('QQ bot is not connected');
+        error.code = 'bot-not-connected';
+        throw error;
+      }
+      const deliveryTarget = target?.scope === 'c2c'
+        ? { kind: 'user', route: { userOpenId: target.targetId } }
+        : target?.scope === 'group'
+          ? { kind: 'group', route: { groupOpenId: target.targetId } } : target;
+      await runtime.sendRich(deliveryTarget, payload, options);
+      return { sent: true };
+    });
+  }
+
   async presentSessionSyncApproval(botId, target, interaction, options = {}) {
     const config = this.#configStore.get(botId);
     if (!config) throw new Error('Unknown QQ bot');
@@ -355,6 +402,7 @@ export class QqController {
         state,
         connected,
         configured: true,
+        features: { streamingEnabled: config.streamingEnabled === true, nativeCallbacks: true },
         bot: { name: t('QQ机器人'), appIdMasked: maskQqAppId(config.appId) },
         health: {
           status: connected ? 'healthy' : state === 'error' ? 'error' : 'offline',

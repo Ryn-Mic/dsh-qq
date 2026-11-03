@@ -10,6 +10,11 @@ import { evaluateInboundAccess } from '../shared/inbound-access.mjs';
 import { createQqBridgeStatus, QqHarnessBridge } from './qq-bridge.mjs';
 import { isQqMessageAddressed, normalizeQqMentions } from './qq-mention.mjs';
 import { sendMarkdownReply } from './markdown-reply.mjs';
+import { createQqInteractionHandler } from './interaction-actions.mjs';
+import { acknowledgeQqInteraction } from './interaction-ack.mjs';
+import { createQqInteractionEnvelopeTracker } from './interaction-envelope.mjs';
+import { QqExtendedApi } from './qq-extended-api.mjs';
+import { createEventAwareBot } from './event-aware-bot.mjs';
 
 function timeoutError() {
   const error = new Error('QQ WebSocket did not become ready in time');
@@ -44,12 +49,14 @@ export class QqRuntime {
   #connectTimeoutMs;
   #createBot;
   #typingMiddleware;
+  #interactionFetchImpl;
   #status = createQqRuntimeStatus();
   #bot = null;
   #bridge = null;
   #abortController = null;
   #runTask = null;
   #starting = null;
+  #interactionTasks = new Set();
 
   constructor({
     config,
@@ -64,6 +71,7 @@ export class QqRuntime {
     connectTimeoutMs = 20_000,
     createBot = (options) => new QQBot(options),
     typingMiddleware = typingIndicator,
+    interactionFetchImpl = fetch,
   }) {
     if (!config || !appSecret || !harness || !state) {
       throw new TypeError('QqRuntime requires config, app secret, Harness, and state');
@@ -80,10 +88,56 @@ export class QqRuntime {
     this.#connectTimeoutMs = connectTimeoutMs;
     this.#createBot = createBot;
     this.#typingMiddleware = typingMiddleware;
+    this.#interactionFetchImpl = interactionFetchImpl;
   }
 
   get status() {
     return structuredClone(this.#status);
+  }
+
+  setStreamingEnabled(enabled) {
+    this.#config = { ...this.#config, streamingEnabled: enabled === true };
+    this.#bridge?.setStreamingEnabled(enabled === true);
+  }
+
+  async nativeManagement(action, args = {}, options = {}) {
+    if (!this.#status.ready || !this.#bot) {
+      const error = new Error('QQ bot is not connected');
+      error.code = 'bot-not-connected';
+      throw error;
+    }
+    const api = new QqExtendedApi({ bot: this.#bot });
+    switch (action) {
+      case 'getMenu': return api.getMenu(options);
+      case 'putMenu': return api.putMenu({ menu: args.menu }, {
+        ...options, ...(args.expectedVersion === undefined ? {} : { expectedVersion: args.expectedVersion }),
+      });
+      case 'listPanels': return api.listPanels(args.query ?? { scope: 'c2c' }, options);
+      case 'getPanel': return api.getPanel(args.panelId, options);
+      case 'createPanel': return api.createPanel(args.panel, options);
+      case 'updatePanel': return api.updatePanel(args.panelId, { panel: args.panel?.panel ?? args.panel }, options);
+      case 'deletePanel': return api.deletePanel(args.panelId, options);
+      case 'updatePanelTargets': return api.updatePanelTargets(args.panelId, args.targets, options);
+      default: throw new TypeError('Unknown native QQ management action');
+    }
+  }
+
+  async sendRich(target, payload, options = {}) {
+    const value = target?.kind === 'user'
+      ? target?.route?.userOpenId : target?.kind === 'group' ? target?.route?.groupOpenId : '';
+    const nativeId = typeof value === 'string' ? value.trim() : '';
+    if (!nativeId) {
+      const error = new TypeError('Invalid QQ proactive delivery target');
+      error.code = 'invalid-target';
+      throw error;
+    }
+    if (!this.#status.ready || !this.#bridge) {
+      const error = new Error('QQ bot is not connected');
+      error.code = 'bot-not-connected';
+      throw error;
+    }
+    options.signal?.throwIfAborted();
+    return this.#bridge.sendRich({ scope: target.kind === 'user' ? 'c2c' : 'group', targetId: nativeId }, payload, options);
   }
 
   async sendConnectionTest(text) {
@@ -165,10 +219,16 @@ export class QqRuntime {
     await atConnectionStage('harness.check', () => this.#harness.ensureRunning());
     this.#status.harnessReachable = true;
 
+    let interactionEnvelopes;
     const sdkLogger = {
       error: (...args) => this.#logger.error?.(...args),
       warn: (...args) => this.#logger.warn?.(...args),
-      info: (...args) => this.#logger.info?.(...args),
+      info: (...args) => {
+        // SDK 1.0.4 logs socket open before reading frames. Attach here so
+        // replayed interactions preceding RESUMED keep their outer event ID.
+        interactionEnvelopes?.attach();
+        return this.#logger.info?.(...args);
+      },
       debug: () => {},
     };
     const bot = this.#createBot({
@@ -188,8 +248,11 @@ export class QqRuntime {
     const controller = new AbortController();
     this.#abortController = controller;
     this.#bot = bot;
+    interactionEnvelopes = createQqInteractionEnvelopeTracker({ bot });
+    controller.signal.addEventListener('abort', () => interactionEnvelopes.dispose(), { once: true });
+    const replyBot = createEventAwareBot(bot);
     this.#bridge = new QqHarnessBridge({
-      bot,
+      bot: replyBot,
       ownerUserOpenid: this.#config.ownerUserOpenid,
       harness: this.#harness,
       state: this.#state,
@@ -200,6 +263,7 @@ export class QqRuntime {
       logger: this.#logger,
       replyTimeoutMs: this.#replyTimeoutMs,
       signal: controller.signal,
+      streamingEnabled: this.#config.streamingEnabled === true,
     });
     const botMentionIds = new Set([this.#config.appId]);
     bot.use(async (ctx, next) => {
@@ -235,6 +299,7 @@ export class QqRuntime {
       readyReject = reject;
     });
     const onReady = (data) => {
+      interactionEnvelopes.attach();
       if (typeof data?.user?.id === 'string' && data.user.id.trim()) {
         botMentionIds.add(data.user.id.trim());
       }
@@ -257,7 +322,7 @@ export class QqRuntime {
     const onMessage = (_ctx, message) => {
       const task = this.#bridge?.accept(message);
       if (!task) return;
-      void task.catch((error) => {
+      return task.catch((error) => {
         if (controller.signal.aborted) return;
         this.#logger.error?.(
           `[dsh-im:qq] bot ${this.#config.botId} message handling failed:`,
@@ -265,10 +330,31 @@ export class QqRuntime {
         );
       });
     };
+    // SDK 1.0.4 defaults to FULL_INTENTS, including INTERACTION (1 << 26).
+    // interaction is a separate (ctx, event) event, outside message middleware.
+    const handleInteraction = createQqInteractionHandler({
+      bot, replyBot, bridge: this.#bridge, appId: this.#config.appId,
+      ownerUserOpenid: this.#config.ownerUserOpenid, accessPolicy: this.#accessPolicy,
+      signal: controller.signal, logger: this.#logger,
+      acknowledgeInteraction: (interactionId, code, options) =>
+        acknowledgeQqInteraction({ bot, interactionId, code, ...options, fetchImpl: this.#interactionFetchImpl }),
+    });
+    const onInteraction = (ctx, event) => {
+      const interactionContext = { ...ctx, transportEventId: interactionEnvelopes.replyEventIdFor(event) };
+      const task = handleInteraction(interactionContext, event).catch((error) => {
+        if (!controller.signal.aborted) this.#logger.error?.(
+          `[dsh-im:qq] bot ${this.#config.botId} interaction handling failed:`,
+          extractConnectionEvidence(error).details,
+        );
+      }).finally(() => this.#interactionTasks.delete(task));
+      this.#interactionTasks.add(task);
+      return task;
+    };
     bot.on('ready', onReady);
     bot.on('resumed', onReady);
     bot.on('error', onError);
     bot.on('message', onMessage);
+    bot.on('interaction', onInteraction);
 
     const runTask = Promise.resolve().then(() => bot.start(controller.signal));
     this.#runTask = runTask;
@@ -326,6 +412,7 @@ export class QqRuntime {
       new Promise((resolve) => setTimeout(resolve, 2_000)),
     ]);
     await bridge?.waitForIdle();
+    await Promise.allSettled([...this.#interactionTasks]);
     this.#status.ready = false;
     this.#status.qqConnectionState = 'idle';
     return this.status;

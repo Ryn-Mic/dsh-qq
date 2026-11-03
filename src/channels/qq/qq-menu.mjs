@@ -27,46 +27,107 @@ export function parseQqMenuCommand(text) {
   return { error: true };
 }
 
-// A menu belongs to its actor and route. The exact displayed actions, including
-// paginated choices, stay in memory; clients only send an opaque token + index.
+// Cards keep their own actor, route and displayed choices for their entire TTL.
+// The active pointer only controls bare numeric replies; publishing a candidate
+// must not retire a card that QQ is still displaying, even if delivery times out.
 export class QqMenuStore {
   #entries = new Map();
+  #owners = new Map();
+  #sequence = 0;
   #now;
   constructor({ now = Date.now } = {}) { this.#now = now; }
   #key(route, actor) { return `${route}\0${actor}`; }
-  has(route, actor) { return this.#entries.has(this.#key(route, actor)); }
-  tokenFor(route, actor) { return this.#entries.get(this.#key(route, actor))?.token; }
-  clear(route, actor) { this.#entries.delete(this.#key(route, actor)); }
-  begin(route, actor, context) {
-    const key = this.#key(route, actor);
-    const entry = { ...context, token: randomBytes(12).toString('hex'),
-      expiresAt: this.#now() + QQ_MENU_TTL_MS, used: false, view: null };
-    this.#entries.delete(key);
-    this.#entries.set(key, entry);
+  #prune() {
+    const now = this.#now();
+    for (const [token, entry] of this.#entries) {
+      if (entry.expiresAt <= now) this.#entries.delete(token);
+    }
     while (this.#entries.size > MAX_MENUS) this.#entries.delete(this.#entries.keys().next().value);
+    const liveOwners = new Set([...this.#entries.values()].map((entry) => this.#key(entry.route, entry.actor)));
+    for (const [key, owner] of this.#owners) {
+      if (!liveOwners.has(key)) this.#owners.delete(key);
+      else if (!this.#entries.has(owner.activeToken)) owner.activeToken = null;
+    }
+  }
+  has(route, actor) { return Boolean(this.tokenFor(route, actor)); }
+  tokenFor(route, actor) {
+    this.#prune();
+    return this.#owners.get(this.#key(route, actor))?.activeToken ?? undefined;
+  }
+  clear(route, actor) {
+    const owner = this.#owners.get(this.#key(route, actor));
+    if (!owner) return;
+    owner.activeToken = null;
+    // An older send that finishes after ordinary input must not reopen digits.
+    owner.sequence = ++this.#sequence;
+  }
+  stage(route, actor, context) {
+    this.#prune();
+    const entry = { ...context, route, actor, token: randomBytes(12).toString('hex'),
+      sequence: ++this.#sequence, expiresAt: this.#now() + QQ_MENU_TTL_MS,
+      used: false, usedChoices: new Set(), view: null };
+    this.#entries.set(entry.token, entry);
+    const key = this.#key(route, actor);
+    if (!this.#owners.has(key)) this.#owners.set(key, { activeToken: null, sequence: 0 });
+    this.#prune();
     return entry;
   }
+  // Kept for callers that construct explicit-token cards without numeric input.
+  begin(route, actor, context) { return this.stage(route, actor, context); }
   publish(route, actor, entry, view) {
-    if (this.#entries.get(this.#key(route, actor)) !== entry) return false;
+    if (entry.route !== route || entry.actor !== actor || entry.view
+      || this.#entries.get(entry.token) !== entry || entry.expiresAt <= this.#now()
+      || !Array.isArray(view?.entries)) return false;
     entry.view = view;
     return true;
   }
-  take(route, actor, number, token, context) {
-    const entry = this.#entries.get(this.#key(route, actor));
-    if (!entry || entry.used || !entry.view || entry.expiresAt <= this.#now()
-      || (token && token !== entry.token)) return { error: t('这个菜单已过期，请回复 /m 重新打开。') };
-    if (entry.workspace !== context.workspace || entry.sessionWorkspace !== context.sessionWorkspace
-      || entry.sessionId !== context.sessionId) {
-      entry.used = true;
-      return { error: t('会话或工作区已变化，请重新发送 /m。') };
+  discard(route, actor, entry) {
+    if (entry.route !== route || entry.actor !== actor || entry.view
+      || this.#entries.get(entry.token) !== entry) return;
+    this.#entries.delete(entry.token);
+    this.#prune();
+  }
+  activate(route, actor, entry) {
+    this.#prune();
+    if (entry.route !== route || entry.actor !== actor || !entry.view
+      || this.#entries.get(entry.token) !== entry) return false;
+    const owner = this.#owners.get(this.#key(route, actor));
+    if (!owner || owner.sequence > entry.sequence) return false;
+    owner.activeToken = entry.token;
+    owner.sequence = entry.sequence;
+    return true;
+  }
+  inspect(route, actor, number, token, context) {
+    const entry = this.#entries.get(token ?? this.#owners.get(this.#key(route, actor))?.activeToken);
+    const expired = (reason, code = 1) => ({ error: t('这个菜单已过期，请回复 /m 重新打开。'), code, reason });
+    if (!entry) {
+      return expired('unknown-token');
     }
+    if (entry.route !== route) return expired('route-mismatch', 4);
+    if (entry.actor !== actor) return expired('actor-mismatch', 4);
+    if (entry.expiresAt <= this.#now()) return expired('expired');
+    if (!entry.view) return expired('unpublished');
     const choice = entry.view.entries[number - 1];
     if (!Number.isSafeInteger(number) || number < 1 || !choice) {
-      return { error: t('菜单没有这个编号，回复 /m 重新打开。') };
+      return { error: t('菜单没有这个编号，回复 /m 重新打开。'), code: 1, reason: 'invalid-choice' };
     }
-    // Claim before awaiting anything: retries cannot repeat a destructive action.
-    entry.used = true;
+    if (entry.usedChoices.has(number)) return expired('already-used', 3);
+    if (entry.workspace !== context.workspace || entry.sessionWorkspace !== context.sessionWorkspace
+      || entry.sessionId !== context.sessionId) {
+      return { error: t('会话或工作区已变化，请重新发送 /m。'), code: 1, reason: 'context-changed' };
+    }
     return { action: choice.action, context: entry };
+  }
+  take(route, actor, number, token, context) {
+    const choice = this.inspect(route, actor, number, token, context);
+    if (choice.error) return choice;
+    // Only mutations need a claim. Other buttons on the same visible card,
+    // including repeated section/page navigation, remain independently usable.
+    if (!['section', 'page'].includes(choice.action.kind)) {
+      choice.context.usedChoices.add(number);
+      choice.context.used = true;
+    }
+    return choice;
   }
 }
 
@@ -177,13 +238,14 @@ export function qqMenuText(view, { fallback = false } = {}) {
   ].filter((line) => line !== undefined).join('\n');
 }
 
-export function qqMenuKeyboard(view, token) {
+export function qqMenuKeyboard(view, token, { actionType = 1 } = {}) {
   const buttons = view.entries.map((entry, index) => ({
     id: `${token}_${index + 1}`,
-    render_data: { label: view.columns === 3
-      ? clean(entry.label, 24).replace(t('模式／预设'), t('预设')).replace(t('切换归档显示'), t('归档显示'))
-      : `${index + 1}. ${clean(entry.label, 32)}`, visited_label: t('已选择'), style: 0 },
-    action: { type: 2, permission: { type: 2 }, data: `/m pick ${token} ${index + 1}`, enter: true,
+    render_data: { label: clean(view.columns === 3
+      ? clean(entry.label).replace(t('模式／预设'), t('预设')).replace(t('切换归档显示'), t('归档显示'))
+      : `${index + 1}. ${clean(entry.label)}`, 10), visited_label: clean(t('已选择'), 10), style: 0 },
+    action: { type: actionType, permission: { type: 2 }, data: `/m pick ${token} ${index + 1}`,
+      ...(actionType === 2 ? { enter: true } : {}),
       unsupport_tips: t('请回复数字选择，或发送 /m 重新打开菜单。') },
   }));
   const rows = [];
@@ -191,16 +253,38 @@ export function qqMenuKeyboard(view, token) {
   return { content: { rows } };
 }
 
+function definiteKeyboardRejection(error) {
+  return error instanceof ApiError && error.httpStatus >= 400
+    && error.httpStatus < 500 && error.httpStatus !== 429;
+}
+
+function callbackUnsupported(error) {
+  return definiteKeyboardRejection(error) && error.httpStatus !== 401
+    && (error.bizCode === 40034090
+      || /keyboard|button|callback|interaction|unsupported|not supported|按钮|回调|交互|不支持/iu.test(error.message));
+}
+
 export async function sendQqMenu(bot, target, view, token, { logger = console } = {}) {
   if (typeof bot.send === 'function') {
+    const content = qqMenuText(view).replace(/[\\`*_{}\[\]()<>#|!]/gu, '\\$&');
     try {
-      const content = qqMenuText(view).replace(/[\\`*_{}\[\]()<>#|!]/gu, '\\$&');
       return await bot.send({ target, msgType: 2, markdown: { content }, keyboard: qqMenuKeyboard(view, token) });
     } catch (error) {
       // A timeout may have delivered already. Only a definite provider rejection
       // permits another send, so a network fault never creates duplicate menus.
-      if (!(error instanceof ApiError) || error.httpStatus < 400 || error.httpStatus >= 500 || error.httpStatus === 429) throw error;
-      logger.warn?.('[dsh-im:qq] menu rejected; using numbered text:', error.bizCode);
+      if (!definiteKeyboardRejection(error)) throw error;
+      if (!callbackUnsupported(error)) {
+        logger.warn?.('[dsh-im:qq] menu rejected; using numbered text:', error.bizCode);
+        return bot.sendText(target, qqMenuText(view, { fallback: true }));
+      }
+      logger.warn?.('[dsh-im:qq] callback menu rejected; trying command buttons:', error.bizCode);
+    }
+    try {
+      return await bot.send({ target, msgType: 2, markdown: { content },
+        keyboard: qqMenuKeyboard(view, token, { actionType: 2 }) });
+    } catch (error) {
+      if (!definiteKeyboardRejection(error)) throw error;
+      logger.warn?.('[dsh-im:qq] command menu rejected; using numbered text:', error.bizCode);
     }
   }
   return bot.sendText(target, qqMenuText(view, { fallback: true }));

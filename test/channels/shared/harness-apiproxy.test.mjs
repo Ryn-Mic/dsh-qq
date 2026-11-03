@@ -157,51 +157,6 @@ for (const progressMode of ['all', 'live']) {
 }
 }
 
-test('queued live request does not publish the previous turn reasoning', async () => {
-  const { FeishuLiveCot } = await import('../../../src/channels/feishu/live-cot.mjs');
-  const host = hostFixture();
-  host.history.push(
-    { event: { type: 'turn/start', seq: 0, data: { turn: 1 } } },
-    { event: { type: 'user/message', seq: 1, data: { turn: 1, source: { rpcId: 'another-request' } } } },
-  );
-  const written = [];
-  const cot = new FeishuLiveCot({
-    createCot: async () => ({ cotId: 'cot-own', messageId: 'om-own' }),
-    writeCotEvents: async (_handle, events) => written.push(...events),
-  }, 'chat-own');
-  const reasoning = (turn, seq, text) => host.emit({
-    rpcId: `reasoning-${turn}`,
-    payload: { type: 'session/event', sessionId: 'session', event: {
-      type: 'assistant/chunk', seq, data: { turn, step: 0,
-        chunk: { type: 'reasoning-delta', index: 0, text } },
-    } },
-  });
-  host.onPrompt = (rpcId) => {
-    // The previous request is still running while this prompt waits in queue.
-    reasoning(1, 1.5, '上一轮任务的推理内容');
-    host.append({ type: 'turn/end', seq: 2, data: { turn: 1, reason: { kind: 'completed' } } });
-    host.append({ type: 'turn/start', seq: 3, data: { turn: 2 } });
-    host.append({ type: 'user/message', seq: 4, data: { turn: 2, source: { rpcId } } });
-    reasoning(2, 4.5, '当前任务的推理内容');
-    host.append({ type: 'assistant/message', seq: 5, data: { turn: 2, step: 0,
-      message: { content: [{ type: 'text', text: '当前任务的最终答案' }] } },
-    });
-    host.append({ type: 'turn/end', seq: 6, data: { turn: 2, reason: { kind: 'completed' } } });
-  };
-  const client = localClient(host.apiProxy);
-  assert.equal(await client.ask('session', 'current request', {
-    progressMode: 'live', onUpdate: (update) => cot.handle(update), timeoutMs: 3000,
-  }), '当前任务的最终答案');
-  await cot.finish();
-  const decoded = written.map((event) => ({ type: event.event_type, ...JSON.parse(event.content) }));
-  assert.deepEqual({
-    reasoning: decoded.filter((event) => event.type === 'REASONING_MESSAGE_CONTENT').map((event) => event.delta),
-    runIds: decoded.filter((event) => event.type === 'RUN_STARTED' || event.type === 'RUN_FINISHED').map((event) => event.runId),
-  }, {
-    reasoning: ['当前任务的推理内容'],
-    runIds: ['turn-2', 'turn-2'],
-  });
-});
 
 test('in-process RPC preserves IDs, payloads, namespace receivers and errors', async () => {
   const calls = [];

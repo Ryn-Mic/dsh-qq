@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { QqHarnessBridge } from '../../../src/channels/qq/qq-bridge.mjs';
-import { FeishuHarnessBridge } from '../../../src/channels/feishu/bridge.mjs';
-import { WeixinHarnessBridge } from '../../../src/channels/weixin/weixin-bridge.mjs';
-import { WecomHarnessBridge } from '../../../src/channels/wecom/wecom-bridge.mjs';
-import { WecomAppBridge } from '../../../src/channels/wecom-app/wecom-app-bridge.mjs';
-import { DingtalkHarnessBridge } from '../../../src/channels/dingtalk/dingtalk-bridge.mjs';
 
-const shared = Object.fromEntries(await Promise.all([
-  ['slack', 'Slack'], ['telegram', 'Telegram'], ['discord', 'Discord'],
-  ['whatsapp', 'Whatsapp'], ['imessage', 'IMessage'], ['email', 'Email'], ['matrix', 'Matrix'],
-].map(async ([channel, name]) => [channel,
-  (await import(`../../../src/channels/${channel}/${channel}-bridge.mjs`))[`${name}HarnessBridge`]])));
-const channels = [...Object.keys(shared), 'qq', 'feishu', 'weixin', 'wecom', 'wecom-app', 'dingtalk'];
+const shared = {};
+const channels = ['qq'];
 const logger = { info() {}, warn() {}, error() {} };
 const deferred = () => {
   let resolve;

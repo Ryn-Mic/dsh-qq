@@ -132,7 +132,7 @@ test('does not miss an automatic revision arriving between queued decoration and
 });
 
 test('recognizes persisted IM and Office RPC origins without relying on session-id prefixes', async () => {
-  for (const channel of ['weixin', 'feishu', 'dingtalk', 'wecom', 'qq', 'slack', 'telegram', 'discord', 'whatsapp', 'imessage', 'office']) {
+  for (const channel of ['qq']) {
     const f = fixture();
     const session = f.add('random-id', [message(channel), titleEvent('Task')]);
     const decorator = f.start();

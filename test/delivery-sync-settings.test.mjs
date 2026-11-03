@@ -92,7 +92,7 @@ test('the message body separates a non-empty icon with one blank line', () => {
 test('the store writes the document atomically and reads it back', async (t) => {
   const root = await home(t);
   const path = deliverySyncSettingsPath({ dshHome: root });
-  assert.equal(path, join(root, 'integrations', 'dsh-im', 'delivery-sync-settings.json'));
+  assert.equal(path, join(root, 'integrations', 'dsh-qq', 'delivery-sync-settings.json'));
 
   const store = new DeliverySyncSettingsStore(path);
   assert.deepEqual(await store.get(), { ...DEFAULT_DELIVERY_SYNC_SETTINGS });
@@ -124,7 +124,7 @@ test('the store writes the document atomically and reads it back', async (t) => 
 test('a damaged document falls back to the defaults instead of failing', async (t) => {
   const root = await home(t);
   const path = deliverySyncSettingsPath({ dshHome: root });
-  await mkdir(join(root, 'integrations', 'dsh-im'), { recursive: true });
+  await mkdir(join(root, 'integrations', 'dsh-qq'), { recursive: true });
   await writeFile(path, JSON.stringify({ version: 1, deliverySync: { mirrorUserInput: true } }));
   assert.equal((await new DeliverySyncSettingsStore(path).get()).mirrorUserInput, true);
   for (const contents of ['{not json', '[]', '{"version":2,"deliverySync":{}}', '{"version":1,"deliverySync":"x"}']) {

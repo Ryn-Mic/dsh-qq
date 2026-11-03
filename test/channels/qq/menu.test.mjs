@@ -104,11 +104,34 @@ test('QQ main menu contains the agreed thirteen actions without watches or reaso
   assert.doesNotMatch(menu.text, /关注|推理等级/);
   assert.match(menu.text, /标准模式/);
   for (const button of buttons) {
-    assert.equal(button.action.type, 2);
-    assert.equal(button.action.enter, true);
+    assert.equal(button.action.type, 1);
+    assert.equal(button.action.enter, undefined);
     assert.ok(parseQqMenuCommand(button.action.data).token);
   }
   assert.equal(f.calls.length, 0);
+});
+
+test('QQ session and English model button labels fit ten Unicode code points including numbering', async (t) => {
+  const f = await fixture(t);
+  const title = '这是一个需要保留在正文中的很长会话标题与完整上下文';
+  f.sessions[0].title = title;
+  await f.send('/m sessions');
+  assert.ok(f.latestMenu().text.includes(title));
+  const sessionButtons = f.latestMenu().keyboard.content.rows.flatMap((row) => row.buttons);
+  assert.ok(sessionButtons.every((button) => [...button.render_data.label].length <= 10));
+  assert.ok(sessionButtons[0].render_data.label.startsWith('1. '));
+  const name = 'DeepSeek Reasoner Extended Context Experimental';
+  const workspaceSession = f.harness.workspaceSession;
+  f.harness.workspaceSession = (id) => ({ ...workspaceSession(id), models: async () => ({
+    current: {}, groups: [{ id: 'provider', name: 'Provider', models: [{ id: 'long-model', name }] }],
+  }) });
+  await f.send('/m models');
+  assert.ok(f.latestMenu().text.includes(name));
+  const modelButtons = f.latestMenu().keyboard.content.rows.flatMap((row) => row.buttons);
+  assert.ok(modelButtons.every((button) => [...button.render_data.label].length <= 10));
+  const emoji = qqMenuKeyboard({ columns: 3, entries: [{ label: '🤖abcdefghijk', action: {} }] }, 'token');
+  assert.equal(emoji.content.rows[0].buttons[0].render_data.label, '🤖abcdefghi');
+  assert.equal([...emoji.content.rows[0].buttons[0].render_data.visited_label].length <= 10, true);
 });
 
 test('QQ all-message events retain menu commands and numeric selection after self mention cleanup', async (t) => {
@@ -133,7 +156,7 @@ test('QQ numbered session pages select the displayed ID even after the catalog i
   await f.send('1');
   assert.equal(f.state.sessionFor(key), 'session-6');
   await f.pick(1, first);
-  assert.match(f.sent.at(-1).text, /过期/);
+  assert.match(f.sent.at(-1).text, /会话或工作区已变化/);
   assert.equal(f.calls.filter(([op]) => op === 'bind').length, 1);
 });
 
@@ -206,6 +229,42 @@ test('QQ unknown delivery outcomes never cause a second menu delivery', async ()
   const bot = { send: async () => { throw new Error('timeout'); }, sendText: async () => { fallback++; } };
   await assert.rejects(sendQqMenu(bot, {}, { title: '菜单', entries: [] }, 'token'), /timeout/);
   assert.equal(fallback, 0);
+});
+
+test('QQ callback rejection falls back to compatible type-2 command buttons', async (t) => {
+  const f = await fixture(t);
+  const send = f.bot.send;
+  const attempted = [];
+  f.bot.send = async (request) => {
+    attempted.push(request.keyboard.content.rows[0].buttons[0].action.type);
+    if (attempted.length === 1) throw new ApiError('callback buttons unsupported', 400, '/messages', 40034090);
+    return send(request);
+  };
+  await f.send('/m');
+  assert.deepEqual(attempted, [1, 2]);
+  const button = f.latestMenu().keyboard.content.rows[0].buttons[0];
+  assert.equal(button.action.type, 2);
+  assert.equal(button.action.enter, true);
+  await f.pick(5);
+  assert.equal(f.state.sessionFor(key), null);
+});
+
+test('QQ menu delivery never retries ambiguous, throttled, or server failures', async () => {
+  const view = { title: '菜单', entries: [] };
+  for (const error of [new Error('timeout'), new ApiError('callback unsupported', 429, '/messages'),
+    new ApiError('keyboard failed', 500, '/messages')]) {
+    let attempts = 0;
+    const bot = { send: async () => { attempts++; throw error; }, sendText: async () => { attempts++; } };
+    await assert.rejects(sendQqMenu(bot, {}, view, 'token', { logger: quiet }), (caught) => caught === error);
+    assert.equal(attempts, 1);
+  }
+  let attempts = 0;
+  let textFallback = 0;
+  const bot = { send: async () => { attempts++; throw new ApiError('content rejected', 400, '/messages'); },
+    sendText: async () => { textFallback++; } };
+  await sendQqMenu(bot, {}, view, 'token', { logger: quiet });
+  assert.equal(attempts, 1, 'an unrelated 4xx does not retry type-2 buttons');
+  assert.equal(textFallback, 1);
 });
 
 test('QQ stale context, repeated clicks, and other group members cannot apply an old selection', async (t) => {
@@ -293,8 +352,25 @@ test('QQ menu store expires, caps tracking, and rejects unavailable or invalid c
   assert.match(store.take('route', 'actor', 8, entry.token, context).error, /编号/);
   now = QQ_MENU_TTL_MS;
   assert.match(store.take('route', 'actor', 1, entry.token, context).error, /过期/);
-  for (let i = 0; i < 256; i++) store.begin('route', `actor-${i}`, context);
+  for (let i = 0; i < 256; i++) {
+    const candidate = store.stage('route', `actor-${i}`, context);
+    store.publish('route', `actor-${i}`, candidate, view);
+    store.activate('route', `actor-${i}`, candidate);
+  }
   assert.equal(store.has('route', 'actor'), false);
+});
+
+test('QQ callback preflight and execution reject context drift without consuming other card choices', () => {
+  const store = new QqMenuStore();
+  const context = { workspace: '/workspace', sessionWorkspace: '/workspace', sessionId: 'session-one' };
+  const entry = store.begin('c2c:owner', 'owner', context);
+  store.publish('c2c:owner', 'owner', entry, { entries: [{ action: { kind: 'command', text: '/new' } }] });
+  const changed = { ...context, sessionId: 'session-two' };
+  assert.equal(store.inspect('c2c:owner', 'owner', 1, entry.token, changed).code, 1);
+  assert.equal(entry.used, false);
+  assert.equal(store.take('c2c:owner', 'owner', 1, entry.token, changed).code, 1);
+  assert.equal(entry.used, false);
+  assert.equal(store.inspect('c2c:owner', 'owner', 1, entry.token, context).action.text, '/new');
 });
 
 test('QQ queued menu actions recheck running work before changing the session', async (t) => {
